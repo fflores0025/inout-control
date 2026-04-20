@@ -143,17 +143,19 @@ async function cargarDatos() {
   // tabla
   let tableHTML = "";
   data.slice(0, 10).forEach(t => {
-    const time = new Date(t.created_at).toLocaleTimeString();
 
-    tableHTML += `
-      <tr>
-        <td>${time}</td>
-        <td>${t.kiosk_id}</td>
-        <td>${t.amount}€</td>
-        <td>${t.total}€</td>
-      </tr>
-    `;
-  });
+  const time = new Date(t.created_at).toLocaleTimeString();
+
+  tableHTML += `
+    <tr>
+      <td>${time}</td>
+      <td>${t.kiosk_id}</td>
+      <td>${t.amount}€</td>
+      <td>${t.total}€</td>
+    </tr>
+  `;
+
+});
 
   document.getElementById("table").innerHTML = tableHTML;
 }
