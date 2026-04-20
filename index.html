@@ -7,8 +7,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf"></script>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 body {
   font-family: Arial;
@@ -215,8 +214,8 @@ function generarGrafica(data) {
 function exportPDF() {
   html2canvas(document.body).then(canvas=>{
     const img = canvas.toDataURL("image/png");
-    const pdf = new jspdf.jsPDF();
-    pdf.addImage(img,'PNG',0,0);
+const { jsPDF } = window.jspdf;
+const pdf = new jsPDF();    pdf.addImage(img,'PNG',0,0);
     pdf.save("report.pdf");
   });
 }
