@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>INOUT Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <style>
+    body { font-family: Arial; background:#0f172a; color:white; padding:20px; }
+    .card { background:#1e293b; padding:20px; border-radius:10px; margin-bottom:20px; }
+    h2 { margin:0 0 10px 0; }
+  </style>
+</head>
+<body>
+
+<h1>💰 INOUT CONTROL PANEL</h1>
+
+<div class="card">
+  <h2>Total generado</h2>
+  <p id="total">0€</p>
+</div>
+
+<div class="card">
+  <h2>Recargas hoy</h2>
+  <p id="today">0</p>
+</div>
+
+<div class="card">
+  <h2>Por kiosco</h2>
+  <div id="kiosks"></div>
+</div>
+
+<script>
+const supabase = supabase.createClient(
+  "https://TU_URL.supabase.co",
+  "TU_ANON_KEY"
+);
+
+async function cargarDatos() {
+
+  const { data } = await supabase
+    .from("transactions")
+    .select("*");
+
+  let total = 0;
+  let todayCount = 0;
+  let kiosks = {};
+
+  const today = new Date().toISOString().split("T")[0];
+
+  data.forEach(t => {
+    total += t.total;
+
+    if (t.created_at.startsWith(today)) {
+      todayCount++;
+    }
+
+    if (!kiosks[t.kiosk_id]) {
+      kiosks[t.kiosk_id] = 0;
+    }
+
+    kiosks[t.kiosk_id] += t.total;
+  });
+
+  document.getElementById("total").innerText = total.toFixed(2) + "€";
+  document.getElementById("today").innerText = todayCount;
+
+  let html = "";
+  for (let k in kiosks) {
+    html += `<p>${k}: ${kiosks[k].toFixed(2)}€</p>`;
+  }
+
+  document.getElementById("kiosks").innerHTML = html;
+}
+
+cargarDatos();
+</script>
+
+</body>
+</html>
