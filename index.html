@@ -14,10 +14,6 @@
       padding: 20px;
     }
 
-    h1 {
-      margin-bottom: 30px;
-    }
-
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -103,13 +99,17 @@ const client = supabase.createClient(
 async function cargarDatos() {
   const { data, error } = await client
     .from("transactions")
-    .select("*");
-}
-  
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
   let total = 0;
   let todayCount = 0;
   let kiosks = {};
-  let avg = 0;
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -127,7 +127,7 @@ async function cargarDatos() {
     kiosks[t.kiosk_id] += Number(t.total);
   });
 
-  avg = data.length ? total / data.length : 0;
+  const avg = data.length ? total / data.length : 0;
 
   document.getElementById("total").innerText = total.toFixed(2) + "€";
   document.getElementById("today").innerText = todayCount;
@@ -143,25 +143,23 @@ async function cargarDatos() {
   // tabla
   let tableHTML = "";
   data.slice(0, 10).forEach(t => {
+    const time = new Date(t.created_at).toLocaleTimeString();
 
-  const time = new Date(t.created_at).toLocaleTimeString();
-
-  tableHTML += `
-    <tr>
-      <td>${time}</td>
-      <td>${t.kiosk_id}</td>
-      <td>${t.amount}€</td>
-      <td>${t.total}€</td>
-    </tr>
-  `;
-
-});
+    tableHTML += `
+      <tr>
+        <td>${time}</td>
+        <td>${t.kiosk_id}</td>
+        <td>${t.amount}€</td>
+        <td>${t.total}€</td>
+      </tr>
+    `;
+  });
 
   document.getElementById("table").innerHTML = tableHTML;
+}
 
-// refresco automático cada 5s
+// refresco automático
 setInterval(cargarDatos, 5000);
-
 cargarDatos();
 </script>
 
