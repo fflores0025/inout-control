@@ -1,31 +1,97 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <title>INOUT Dashboard</title>
+  <meta charset="UTF-8">
+  <title>INOUT CONTROL PANEL</title>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
   <style>
-    body { font-family: Arial; background:#0f172a; color:white; padding:20px; }
-    .card { background:#1e293b; padding:20px; border-radius:10px; margin-bottom:20px; }
-    h2 { margin:0 0 10px 0; }
+    body {
+      font-family: Arial;
+      background: #0f172a;
+      color: white;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+    .big {
+      font-size: 28px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 20px;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #334155;
+      text-align: left;
+    }
+
+    th {
+      color: #94a3b8;
+    }
   </style>
 </head>
 <body>
 
 <h1>💰 INOUT CONTROL PANEL</h1>
 
-<div class="card">
-  <h2>Total generado</h2>
-  <p id="total">0€</p>
+<div class="grid">
+  <div class="card">
+    <h3>Total generado</h3>
+    <div id="total" class="big">0€</div>
+  </div>
+
+  <div class="card">
+    <h3>Recargas hoy</h3>
+    <div id="today" class="big">0</div>
+  </div>
+
+  <div class="card">
+    <h3>Ticket medio</h3>
+    <div id="avg" class="big">0€</div>
+  </div>
 </div>
 
 <div class="card">
-  <h2>Recargas hoy</h2>
-  <p id="today">0</p>
-</div>
-
-<div class="card">
-  <h2>Por kiosco</h2>
+  <h3>💻 Por kiosco</h3>
   <div id="kiosks"></div>
+</div>
+
+<div class="card">
+  <h3>🧾 Últimas transacciones</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Hora</th>
+        <th>Kiosco</th>
+        <th>Importe</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody id="table"></tbody>
+  </table>
 </div>
 
 <script>
@@ -36,18 +102,25 @@ const supabase = supabase.createClient(
 
 async function cargarDatos() {
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("transactions")
-    .select("*");
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    return;
+  }
 
   let total = 0;
   let todayCount = 0;
   let kiosks = {};
+  let avg = 0;
 
   const today = new Date().toISOString().split("T")[0];
 
   data.forEach(t => {
-    total += t.total;
+    total += Number(t.total);
 
     if (t.created_at.startsWith(today)) {
       todayCount++;
@@ -57,19 +130,42 @@ async function cargarDatos() {
       kiosks[t.kiosk_id] = 0;
     }
 
-    kiosks[t.kiosk_id] += t.total;
+    kiosks[t.kiosk_id] += Number(t.total);
   });
+
+  avg = data.length ? total / data.length : 0;
 
   document.getElementById("total").innerText = total.toFixed(2) + "€";
   document.getElementById("today").innerText = todayCount;
+  document.getElementById("avg").innerText = avg.toFixed(2) + "€";
 
-  let html = "";
+  // kioscos
+  let kiosksHTML = "";
   for (let k in kiosks) {
-    html += `<p>${k}: ${kiosks[k].toFixed(2)}€</p>`;
+    kiosksHTML += `<p>${k}: ${kiosks[k].toFixed(2)}€</p>`;
   }
+  document.getElementById("kiosks").innerHTML = kiosksHTML;
 
-  document.getElementById("kiosks").innerHTML = html;
+  // tabla
+  let tableHTML = "";
+  data.slice(0, 10).forEach(t => {
+    const time = new Date(t.created_at).toLocaleTimeString();
+
+    tableHTML += `
+      <tr>
+        <td>${time}</td>
+        <td>${t.kiosk_id}</td>
+        <td>${t.amount}€</td>
+        <td>${t.total}€</td>
+      </tr>
+    `;
+  });
+
+  document.getElementById("table").innerHTML = tableHTML;
 }
+
+// refresco automático cada 5s
+setInterval(cargarDatos, 5000);
 
 cargarDatos();
 </script>
