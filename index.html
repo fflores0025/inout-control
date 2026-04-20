@@ -1,82 +1,89 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>INOUT CONTROL PANEL</title>
+<meta charset="UTF-8">
+<title>INOUT CONTROL PANEL</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf"></script>
 
-  <style>
-    body {
-      font-family: Arial;
-      background: #0f172a;
-      color: white;
-      padding: 20px;
-    }
+<style>
+body {
+  font-family: Arial;
+  background: #0f172a;
+  color: white;
+  padding: 20px;
+}
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 20px;
-    }
+h1 { margin-bottom: 20px; }
 
-    .card {
-      background: #1e293b;
-      padding: 20px;
-      border-radius: 12px;
-    }
+select, button {
+  padding: 10px;
+  border-radius: 8px;
+  margin-right: 10px;
+}
 
-    .big {
-      font-size: 28px;
-      font-weight: bold;
-      margin-top: 10px;
-    }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+}
 
-    table {
-      width: 100%;
-      margin-top: 20px;
-      border-collapse: collapse;
-    }
+.card {
+  background: #1e293b;
+  padding: 20px;
+  border-radius: 12px;
+  transition: 0.3s;
+}
 
-    th, td {
-      padding: 10px;
-      border-bottom: 1px solid #334155;
-      text-align: left;
-    }
+.card.updated {
+  transform: scale(1.03);
+  background: #334155;
+}
 
-    th {
-      color: #94a3b8;
-    }
-  </style>
+.big {
+  font-size: 28px;
+  font-weight: bold;
+}
+
+table {
+  width: 100%;
+  margin-top: 20px;
+}
+
+th, td {
+  padding: 10px;
+  border-bottom: 1px solid #334155;
+}
+
+canvas {
+  margin-top: 30px;
+}
+</style>
 </head>
+
 <body>
 
 <h1>💰 INOUT CONTROL PANEL</h1>
 
+<select id="eventFilter"></select>
+<button onclick="exportPDF()">📄 Descargar PDF</button>
+
 <div class="grid">
-  <div class="card">
-    <h3>Total generado</h3>
-    <div id="total" class="big">0€</div>
-  </div>
-
-  <div class="card">
-    <h3>Recargas hoy</h3>
-    <div id="today" class="big">0</div>
-  </div>
-
-  <div class="card">
-    <h3>Ticket medio</h3>
-    <div id="avg" class="big">0€</div>
-  </div>
+  <div class="card"><h3>Total</h3><div id="total" class="big">0€</div></div>
+  <div class="card"><h3>Hoy</h3><div id="today" class="big">0</div></div>
+  <div class="card"><h3>Media</h3><div id="avg" class="big">0€</div></div>
 </div>
 
 <div class="card">
-  <h3>💻 Por kiosco</h3>
+  <h3>🏷️ Kioscos</h3>
   <div id="kiosks"></div>
 </div>
 
 <div class="card">
-  <h3>🧾 Últimas transacciones</h3>
+  <h3>🧾 Transacciones</h3>
   <table>
     <thead>
       <tr>
@@ -90,22 +97,42 @@
   </table>
 </div>
 
+<canvas id="chart"></canvas>
+
 <script>
 const client = supabase.createClient(
-  "https://raoxkjnwrccoxjcipfpv.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhb3hram53cmNjb3hqY2lwZnB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMzMxNzgsImV4cCI6MjA5MTgwOTE3OH0.dlPG4hpA-ypmGkqrP0ohaiOfMtXq5dpVmV7QNOt7_Qs"
+  "https://TU_URL.supabase.co",
+  "TU_ANON_KEY"
 );
 
-async function cargarDatos() {
-  const { data, error } = await client
-    .from("transactions")
-    .select("*")
-    .order("created_at", { ascending: false });
+let chart;
 
-  if (error) {
-    console.error(error);
-    return;
+// CARGAR EVENTOS
+async function cargarEventos() {
+  const { data } = await client.from("transactions").select("event_id");
+
+  const unique = [...new Set(data.map(d => d.event_id))];
+
+  const select = document.getElementById("eventFilter");
+  select.innerHTML = `<option value="all">Todos</option>`;
+
+  unique.forEach(e => {
+    select.innerHTML += `<option value="${e}">${e}</option>`;
+  });
+}
+
+// CARGAR DATOS
+async function cargarDatos() {
+
+  const event = document.getElementById("eventFilter").value;
+
+  let query = client.from("transactions").select("*");
+
+  if (event !== "all") {
+    query = query.eq("event_id", event);
   }
+
+  const { data } = await query.order("created_at", { ascending: false });
 
   let total = 0;
   let todayCount = 0;
@@ -116,15 +143,9 @@ async function cargarDatos() {
   data.forEach(t => {
     total += Number(t.total);
 
-    if (t.created_at.startsWith(today)) {
-      todayCount++;
-    }
+    if (t.created_at.startsWith(today)) todayCount++;
 
-    if (!kiosks[t.kiosk_id]) {
-      kiosks[t.kiosk_id] = 0;
-    }
-
-    kiosks[t.kiosk_id] += Number(t.total);
+    kiosks[t.kiosk_id] = (kiosks[t.kiosk_id] || 0) + Number(t.total);
   });
 
   const avg = data.length ? total / data.length : 0;
@@ -135,14 +156,17 @@ async function cargarDatos() {
 
   // kioscos
   let kiosksHTML = "";
-  for (let k in kiosks) {
-    kiosksHTML += `<p>${k}: ${kiosks[k].toFixed(2)}€</p>`;
-  }
+  Object.entries(kiosks)
+    .sort((a,b)=>b[1]-a[1])
+    .forEach(([k,v])=>{
+      kiosksHTML += `<div>${k}: ${v.toFixed(2)}€</div>`;
+    });
+
   document.getElementById("kiosks").innerHTML = kiosksHTML;
 
   // tabla
   let tableHTML = "";
-  data.slice(0, 10).forEach(t => {
+  data.slice(0,10).forEach(t=>{
     const time = new Date(t.created_at).toLocaleTimeString();
 
     tableHTML += `
@@ -156,11 +180,61 @@ async function cargarDatos() {
   });
 
   document.getElementById("table").innerHTML = tableHTML;
+
+  generarGrafica(data);
+  animar();
 }
 
-// refresco automático
-setInterval(cargarDatos, 5000);
+// GRÁFICA
+function generarGrafica(data) {
+  const horas = {};
+
+  data.forEach(t=>{
+    const h = new Date(t.created_at).getHours();
+    horas[h] = (horas[h]||0)+Number(t.total);
+  });
+
+  const labels = Object.keys(horas);
+  const values = Object.values(horas);
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(document.getElementById("chart"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "Ventas (€)",
+        data: values
+      }]
+    }
+  });
+}
+
+// PDF
+function exportPDF() {
+  html2canvas(document.body).then(canvas=>{
+    const img = canvas.toDataURL("image/png");
+    const pdf = new jspdf.jsPDF();
+    pdf.addImage(img,'PNG',0,0);
+    pdf.save("report.pdf");
+  });
+}
+
+// ANIMACIÓN
+function animar(){
+  document.querySelectorAll(".card").forEach(c=>{
+    c.classList.add("updated");
+    setTimeout(()=>c.classList.remove("updated"),300);
+  });
+}
+
+// INIT
+document.getElementById("eventFilter").addEventListener("change", cargarDatos);
+
+cargarEventos();
 cargarDatos();
+setInterval(cargarDatos, 5000);
 </script>
 
 </body>
