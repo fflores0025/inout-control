@@ -9,37 +9,6 @@
 <script src="https://cdn.jsdelivr.net/npm/html2canvas"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-
-<!-- LOGIN -->
-<div id="login-screen">
-  <div class="login-card">
-    <div id="panel-login">
-      <div class="login-logo">InOut<span class="logo-dot">.</span></div>
-      <div class="login-sub">Portal del equipo · InOut Media</div>
-      <div id="login-error" style="display:none;background:rgba(255,60,172,.1);border:1px solid rgba(255,60,172,.2);color:var(--a2);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;"></div>
-      <label class="form-lbl">Email</label>
-      <input class="form-input" id="login-email" type="email" placeholder="tu@noctua.es" autocomplete="email"/>
-      <label class="form-lbl">Contraseña</label>
-      <input class="form-input" id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password"/>
-      <button class="btn btn-p btn-full" id="login-btn" onclick="doLogin()" style="font-size:15px;padding:12px">Entrar al portal</button>
-      <div style="margin-top:10px;text-align:center">
-        <span style="font-size:12px;color:var(--a3);cursor:pointer;text-decoration:underline" onclick="mostrarPanelReset()">¿Olvidaste tu contraseña?</span>
-      </div>
-      <div style="margin-top:8px;font-size:12px;color:var(--muted);text-align:center">¿Sin acceso? Contacta con el administrador</div>
-    </div>
-    <div id="panel-reset" style="display:none">
-      <div class="login-logo">InOut<span class="logo-dot">.</span></div>
-      <div class="login-sub" style="margin-bottom:20px">Recuperar contraseña</div>
-      <div id="reset-msg" style="display:none;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;"></div>
-      <label class="form-lbl">Tu email</label>
-      <input class="form-input" id="reset-email" type="email" placeholder="tu@noctua.es"/>
-      <button class="btn btn-p btn-full" onclick="enviarResetEmail()" style="font-size:15px;padding:12px">Enviar enlace</button>
-      <div style="margin-top:10px;text-align:center">
-        <span style="font-size:12px;color:var(--a3);cursor:pointer;text-decoration:underline" onclick="mostrarPanelLogin()">← Volver al inicio de sesión</span>
-      </div>
-    </div>
-  </div>
-</div>
   
 body {
   font-family: Arial;
