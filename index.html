@@ -1,241 +1,739 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>INOUT CONTROL PANEL</title>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<style>
-  
-body {
-  font-family: Arial;
-  background: #0f172a;
-  color: white;
-  padding: 20px;
-}
-
-h1 { margin-bottom: 20px; }
-
-select, button {
-  padding: 10px;
-  border-radius: 8px;
-  margin-right: 10px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-}
-
-.card {
-  background: #1e293b;
-  padding: 20px;
-  border-radius: 12px;
-  transition: 0.3s;
-}
-
-.card.updated {
-  transform: scale(1.03);
-  background: #334155;
-}
-
-.big {
-  font-size: 28px;
-  font-weight: bold;
-}
-
-table {
-  width: 100%;
-  margin-top: 20px;
-}
-
-th, td {
-  padding: 10px;
-  border-bottom: 1px solid #334155;
-}
-
-canvas {
-  margin-top: 30px;
-}
-</style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="theme-color" content="#07070f"/>
+  <title>InOut Control · Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+    :root{
+      --bg:#07070f;--surf:#0d0d1a;--card:#111120;--border:#1c1c2e;
+      --a1:#c8ff00;--a2:#ff3cac;--a3:#00d4ff;
+      --txt:#e6e6f0;--muted:#60607a;--r:14px;
+      --success:#00e676;--danger:#ff1744;--warn:#ffab00;
+      --sidebar:240px;
+    }
+    html,body{height:100%;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--txt);background:var(--bg);overflow-x:hidden;}
+    ::-webkit-scrollbar{width:4px;height:4px;}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+    #app{display:flex;min-height:100vh;}
+    .sidebar{width:var(--sidebar);height:100vh;background:var(--surf);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:200;}
+    .main-area{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+    .topbar{height:56px;background:var(--surf);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:100;}
+    .main-content{flex:1;padding:24px;max-width:1200px;width:100%;margin:0 auto;}
+    .s-logo{padding:20px 18px 16px;border-bottom:1px solid var(--border);font-family:'Syne',sans-serif;font-weight:800;font-size:18px;}
+    .logo-dot{color:var(--a1);}
+    .s-logo small{display:block;font-family:'DM Sans',sans-serif;font-weight:400;font-size:10px;color:var(--a2);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px;}
+    .nav{flex:1;padding:8px 0;overflow-y:auto;}
+    .nav-sec{padding:10px 18px 4px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600;}
+    .nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;cursor:pointer;color:var(--muted);transition:all .15s;font-size:13px;border-left:2px solid transparent;}
+    .nav-item:hover{color:var(--txt);background:rgba(255,255,255,.03);}
+    .nav-item.active{color:var(--a1);border-left-color:var(--a1);background:rgba(200,255,0,.05);}
+    .nav-icon{font-size:15px;width:20px;text-align:center;flex-shrink:0;}
+    .s-bottom{padding:14px 18px;border-top:1px solid var(--border);}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;border-radius:9px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;transition:all .15s;white-space:nowrap;}
+    .btn:active{opacity:.8;}
+    .btn-p{background:var(--a1);color:#000;}
+    .btn-g{background:transparent;color:var(--muted);border:1px solid var(--border);}
+    .btn-g:hover{color:var(--txt);border-color:var(--muted);}
+    .btn-danger{background:rgba(255,23,68,.1);color:var(--danger);border:1px solid rgba(255,23,68,.2);}
+    .btn-full{width:100%;justify-content:center;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;}
+    .card-title{font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px;}
+    .stat{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;}
+    .stat-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+    .stat-val{font-family:'Syne',sans-serif;font-size:26px;font-weight:700;letter-spacing:-1px;}
+    .g2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+    .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+    .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+    .mb16{margin-bottom:16px;}.mb24{margin-bottom:24px;}
+    .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;}
+    .b-green{background:rgba(0,230,118,.12);color:var(--success);}
+    .b-red{background:rgba(255,23,68,.12);color:var(--danger);}
+    .b-blue{background:rgba(0,212,255,.12);color:var(--a3);}
+    .b-gray{background:rgba(107,107,136,.15);color:var(--muted);}
+    .b-warn{background:rgba(255,171,0,.12);color:var(--warn);}
+    .b-pink{background:rgba(255,60,172,.12);color:var(--a2);}
+    .tbl-wrap{overflow-x:auto;border-radius:8px;}
+    table{width:100%;border-collapse:collapse;}
+    thead th{text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap;}
+    tbody td{padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px;}
+    tbody tr:last-child td{border-bottom:none;}
+    tbody tr:hover td{background:rgba(255,255,255,.02);}
+    .form-lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block;}
+    .form-input,.form-select{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--txt);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color .15s;margin-bottom:14px;}
+    .form-input:focus,.form-select:focus{border-color:var(--a1);}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);z-index:900;align-items:center;justify-content:center;padding:16px;}
+    .modal-overlay.show{display:flex;}
+    .modal-box{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:28px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;}
+    .modal-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:20px;}
+    #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 20px;font-size:13px;z-index:1000;transition:transform .3s;white-space:nowrap;}
+    #toast.show{transform:translateX(-50%) translateY(0);}
+    .device-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;transition:border-color .2s;}
+    .device-card.online{border-color:rgba(0,230,118,.25);}
+    .device-card.offline{opacity:.7;}
+    .device-status{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+    .device-status.on{background:var(--success);box-shadow:0 0 6px rgba(0,230,118,.5);}
+    .device-status.off{background:var(--muted);}
+    .test-log{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:12px;font-size:12px;font-family:monospace;max-height:200px;overflow-y:auto;color:var(--txt);}
+    .test-log .ok{color:var(--success);}
+    .test-log .err{color:var(--danger);}
+    .test-log .info{color:var(--a3);}
+    .test-log .warn{color:var(--warn);}
+    /* Login screen */
+    #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:radial-gradient(ellipse 50% 35% at 50% 0%,rgba(255,60,172,.08) 0%,transparent 60%);}
+    .login-card{width:100%;max-width:380px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:36px 32px;}
+    @media(max-width:768px){
+      :root{--sidebar:100vw;}
+      .sidebar{position:fixed;transform:translateX(-100%);width:100vw;transition:transform .25s;}
+      .sidebar.open{transform:translateX(0);}
+      .main-area{margin-left:0;}
+      .g4{grid-template-columns:1fr 1fr;}.g3{grid-template-columns:1fr;}.g2{grid-template-columns:1fr;}
+      .main-content{padding:14px;}
+    }
+  </style>
 </head>
-
 <body>
+<div id="toast"></div>
+<div class="modal-overlay" id="modal-overlay"><div class="modal-box" id="modal-box"></div></div>
 
-<h1>💰 INOUT CONTROL PANEL</h1>
-
-<select id="eventFilter"></select>
-<button onclick="exportPDF()">📄 Descargar PDF</button>
-
-<div class="grid">
-  <div class="card"><h3>Total</h3><div id="total" class="big">0€</div></div>
-  <div class="card"><h3>Hoy</h3><div id="today" class="big">0</div></div>
-  <div class="card"><h3>Media</h3><div id="avg" class="big">0€</div></div>
+<!-- LOGIN — solo admin -->
+<div id="login-screen">
+  <div class="login-card">
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:24px;margin-bottom:4px">InOut<span style="color:var(--a2)">.</span> Control</div>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:6px">Acceso exclusivo · Solo administradores</div>
+    <div style="padding:10px 14px;background:rgba(255,60,172,.06);border:1px solid rgba(255,60,172,.15);border-radius:8px;font-size:12px;color:var(--a2);margin-bottom:24px">
+      🔒 Esta app está restringida al rol <strong>admin</strong>
+    </div>
+    <div id="login-err" style="display:none;background:rgba(255,23,68,.1);border:1px solid rgba(255,23,68,.2);color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px"></div>
+    <label class="form-lbl">Email</label>
+    <input class="form-input" id="login-email" type="email" placeholder="admin@inoutmedia.es" autocomplete="email"/>
+    <label class="form-lbl">Contraseña</label>
+    <input class="form-input" id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password"/>
+    <button class="btn btn-p btn-full" style="padding:13px;font-size:15px;border-radius:12px" onclick="doLogin()">Entrar a Control</button>
+  </div>
 </div>
 
-<div class="card">
-  <h3>🏷️ Kioscos</h3>
-  <div id="kiosks"></div>
+<!-- APP -->
+<div id="app" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="s-logo">InOut<span class="logo-dot">.</span> Control<small>Panel de administración</small></div>
+    <nav class="nav" id="nav-items"></nav>
+    <div class="s-bottom">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px" id="s-user-info">—</div>
+      <button class="btn btn-g btn-full" style="padding:8px;font-size:12px" onclick="doLogout()">Cerrar sesión</button>
+    </div>
+  </aside>
+  <div class="main-area">
+    <div class="topbar">
+      <button style="background:none;border:none;color:var(--txt);font-size:22px;cursor:pointer;padding:4px;display:none" id="burger" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+      <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px" id="topbar-title">Control</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;color:var(--a2);padding:3px 10px;border-radius:6px;background:rgba(255,60,172,.08);border:1px solid rgba(255,60,172,.15)">ADMIN</span>
+        <span style="font-size:12px;color:var(--muted)" id="tb-user">—</span>
+      </div>
+    </div>
+    <div class="main-content" id="page-content"></div>
+  </div>
 </div>
-
-<div class="card">
-  <h3>🧾 Transacciones</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Hora</th>
-        <th>Kiosco</th>
-        <th>Importe</th>
-        <th>Total</th>
-      </tr>
-    </thead>
-    <tbody id="table"></tbody>
-  </table>
-</div>
-
-<canvas id="chart"></canvas>
 
 <script>
-const client = supabase.createClient(
-  "https://raoxkjnwrccoxjcipfpv.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJhb3hram53cmNjb3hqY2lwZnB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMzMxNzgsImV4cCI6MjA5MTgwOTE3OH0.dlPG4hpA-ypmGkqrP0ohaiOfMtXq5dpVmV7QNOt7_Qs"
-);
+const SB_URL='https://raoxkjnwrccoxjcipfpv.supabase.co';
+const SB_KEY='sb_publishable__-K1pC4bOJHRf8JQ__OOzg_jqLxlGla';
+const _sb=supabase.createClient(SB_URL,SB_KEY);
 
-let chart;
+let currentUser=null, userProfile=null, currentPage='dashboard';
+let _empleados=[], _eventos=[], _checkins=[];
 
-// CARGAR EVENTOS
-async function cargarEventos() {
-  const { data } = await client.from("transactions").select("event_id");
+const NAV=[
+  {sec:'Panel'},
+  {key:'dashboard',icon:'⚡',label:'Dashboard'},
+  {key:'dispositivos',icon:'📱',label:'Dispositivos'},
+  {key:'test',icon:'🧪',label:'Test remoto'},
+  {sec:'Gestión'},
+  {key:'empleados',icon:'👥',label:'Empleados'},
+  {key:'eventos',icon:'🎪',label:'Eventos'},
+  {key:'pulseras',icon:'📡',label:'Pulseras RFID'},
+  {key:'fichajes',icon:'🕐',label:'Fichajes'},
+  {sec:'Informes'},
+  {key:'informes',icon:'📊',label:'Informes'},
+  {key:'transacciones',icon:'💶',label:'Transacciones'},
+];
+const TITLES={dashboard:'Dashboard',dispositivos:'Dispositivos',test:'Test remoto',empleados:'Empleados',eventos:'Eventos',pulseras:'Pulseras RFID',fichajes:'Fichajes',informes:'Informes',transacciones:'Transacciones'};
 
-  const unique = [...new Set(data.map(d => d.event_id))];
+function toast(msg,ms=2800){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
+function fmt(n){return(n||0).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtDate(d){return new Date(d).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}
+function minsToHHMM(m){const h=Math.floor(m/60),mn=m%60;return`${h}h ${String(mn).padStart(2,'0')}m`;}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('show');document.getElementById('modal-box').innerHTML='';}
+document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();});
 
-  const select = document.getElementById("eventFilter");
-  select.innerHTML = `<option value="all">Todos</option>`;
-
-  unique.forEach(e => {
-    select.innerHTML += `<option value="${e}">${e}</option>`;
-  });
-}
-
-// CARGAR DATOS
-async function cargarDatos() {
-
-  const event = document.getElementById("eventFilter").value;
-
-  let query = client.from("transactions").select("*");
-
-  if (event !== "all") {
-    query = query.eq("event_id", event);
-  }
-
-  const { data } = await query.order("created_at", { ascending: false });
-
-  let total = 0;
-  let todayCount = 0;
-  let kiosks = {};
-
-  const today = new Date().toISOString().split("T")[0];
-
-  data.forEach(t => {
-    total += Number(t.total);
-
-    if (t.created_at.startsWith(today)) todayCount++;
-
-    kiosks[t.kiosk_id] = (kiosks[t.kiosk_id] || 0) + Number(t.total);
-  });
-
-  const avg = data.length ? total / data.length : 0;
-
-  document.getElementById("total").innerText = total.toFixed(2) + "€";
-  document.getElementById("today").innerText = todayCount;
-  document.getElementById("avg").innerText = avg.toFixed(2) + "€";
-
-  // kioscos
-  let kiosksHTML = "";
-  Object.entries(kiosks)
-    .sort((a,b)=>b[1]-a[1])
-    .forEach(([k,v])=>{
-      kiosksHTML += `<div>${k}: ${v.toFixed(2)}€</div>`;
-    });
-
-  document.getElementById("kiosks").innerHTML = kiosksHTML;
-
-  // tabla
-  let tableHTML = "";
-  data.slice(0,10).forEach(t=>{
-    const time = new Date(t.created_at).toLocaleTimeString();
-
-    tableHTML += `
-      <tr>
-        <td>${time}</td>
-        <td>${t.kiosk_id}</td>
-        <td>${t.amount}€</td>
-        <td>${t.total}€</td>
-      </tr>
-    `;
-  });
-
-  document.getElementById("table").innerHTML = tableHTML;
-
-  generarGrafica(data);
-  animar();
-}
-
-// GRÁFICA
-function generarGrafica(data) {
-  const horas = {};
-
-  data.forEach(t=>{
-    const h = new Date(t.created_at).getHours();
-    horas[h] = (horas[h]||0)+Number(t.total);
-  });
-
-  const labels = Object.keys(horas);
-  const values = Object.values(horas);
-
-  if (chart) chart.destroy();
-
-  chart = new Chart(document.getElementById("chart"), {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{
-        label: "Ventas (€)",
-        data: values
-      }]
+// ── AUTH — SOLO ADMIN ──────────────────────────────────────────────────────
+async function doLogin(){
+  const email=document.getElementById('login-email').value.trim();
+  const pass=document.getElementById('login-pass').value;
+  const err=document.getElementById('login-err');
+  err.style.display='none';
+  if(!email||!pass){err.textContent='Introduce email y contraseña';err.style.display='block';return;}
+  try{
+    const{data,error}=await _sb.auth.signInWithPassword({email,password:pass});
+    if(error) throw error;
+    const{data:p}=await _sb.from('empleados').select('*').eq('auth_user_id',data.user.id).single();
+    if(!p||p.role!=='admin'){
+      err.textContent='⛔ Acceso denegado. Solo administradores.';
+      err.style.display='block';
+      await _sb.auth.signOut(); return;
     }
-  });
+    currentUser=data.user;
+    userProfile={nombre:p.nombre,role:p.role,email:p.email,id:p.id,_sbId:p.id};
+    enterApp();
+  }catch(e){
+    err.textContent=e.message==='Invalid login credentials'?'Email o contraseña incorrectos':e.message;
+    err.style.display='block';
+  }
+}
+document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+async function doLogout(){
+  await _sb.auth.signOut();currentUser=null;userProfile=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
 }
 
-// PDF
-function exportPDF() {
-  html2canvas(document.body).then(canvas=>{
-    const img = canvas.toDataURL("image/png");
-const { jsPDF } = window.jspdf;
-const pdf = new jsPDF();    pdf.addImage(img,'PNG',0,0);
-    pdf.save("report.pdf");
-  });
+// ── APP INIT ──────────────────────────────────────────────────────────────
+async function enterApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('tb-user').textContent=userProfile.nombre;
+  document.getElementById('s-user-info').textContent=userProfile.nombre+' · Admin';
+  buildNav();
+  await Promise.all([cargarEmpleados(),cargarEventos()]);
+  navigate('dashboard');
 }
 
-// ANIMACIÓN
-function animar(){
-  document.querySelectorAll(".card").forEach(c=>{
-    c.classList.add("updated");
-    setTimeout(()=>c.classList.remove("updated"),300);
-  });
+async function cargarEmpleados(){
+  const{data}=await _sb.from('empleados').select('*');
+  _empleados=(data||[]);
+}
+async function cargarEventos(){
+  const{data}=await _sb.from('events').select('*').order('fecha_inicio',{ascending:false}).limit(20);
+  _eventos=(data||[]);
 }
 
-// INIT
-document.getElementById("eventFilter").addEventListener("change", cargarDatos);
+function buildNav(){
+  document.getElementById('nav-items').innerHTML=NAV.map(i=>
+    i.sec?`<div class="nav-sec">${i.sec}</div>`
+    :`<div class="nav-item" id="nav-${i.key}" onclick="navigate('${i.key}')"><span class="nav-icon">${i.icon}</span>${i.label}</div>`
+  ).join('');
+}
 
-cargarEventos();
-cargarDatos();
-setInterval(cargarDatos, 5000);
+function navigate(page){
+  currentPage=page;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  document.getElementById('nav-'+page)?.classList.add('active');
+  document.getElementById('topbar-title').textContent=TITLES[page]||page;
+  const pc=document.getElementById('page-content');
+  ({dashboard:renderDashboard,dispositivos:renderDispositivos,test:renderTest,
+    empleados:renderEmpleados,eventos:renderEventos,pulseras:renderPulseras,
+    fichajes:renderFichajes,informes:renderInformes,transacciones:renderTransacciones
+  }[page]||renderDashboard)(pc);
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────
+async function renderDashboard(pc){
+  pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando…</div>`;
+  const[{data:wbs},{data:txs},{data:accesos},{data:checkins}]=await Promise.all([
+    _sb.from('rfid_wristbands').select('id,status,balance'),
+    _sb.from('rfid_transactions').select('type,amount').order('created_at',{ascending:false}).limit(500),
+    _sb.from('rfid_access_log').select('direction').gte('created_at',new Date(Date.now()-86400000).toISOString()),
+    _sb.from('staff_checkins').select('*').is('salida_at',null),
+  ]);
+  const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
+  const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const activasHoy=Math.max(0,(accesos||[]).filter(a=>a.direction==='in').length-(accesos||[]).filter(a=>a.direction==='out').length);
+  const trabajando=(checkins||[]).length;
+
+  pc.innerHTML=`
+    <div class="page-hd" style="margin-bottom:20px"><div style="font-family:Syne;font-size:22px;font-weight:700">Dashboard</div></div>
+    <div class="g4 mb24">
+      <div class="stat"><div class="stat-lbl">Saldo en circulación</div><div class="stat-val" style="color:var(--a1);font-size:22px">${fmt(totalBal)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Total recargado</div><div class="stat-val" style="color:var(--success);font-size:22px">${fmt(totalTop)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Dentro ahora</div><div class="stat-val" style="color:var(--a3)">${activasHoy}</div><div style="font-size:11px;color:var(--muted)">últimas 24h</div></div>
+      <div class="stat"><div class="stat-lbl">Personal trabajando</div><div class="stat-val" style="color:var(--a2)">${trabajando}</div><div style="font-size:11px;color:var(--muted)">fichados ahora</div></div>
+    </div>
+    <div class="g2">
+      <div class="card">
+        <div class="card-title">Eventos activos</div>
+        ${_eventos.filter(e=>['publicado','confirmado','produccion'].includes(e.estado)).slice(0,5).map(e=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            <div><div style="font-weight:500;font-size:13px">${e.nombre}</div><div style="font-size:11px;color:var(--muted)">${(e.fecha_inicio||'').slice(0,10)}</div></div>
+            <span class="badge b-green">${e.estado}</span>
+          </div>`).join('')||'<div style="color:var(--muted);font-size:13px;padding:10px 0">Sin eventos activos</div>'}
+      </div>
+      <div class="card">
+        <div class="card-title">Personal en curso</div>
+        ${(checkins||[]).slice(0,5).map(c=>{
+          const mins=Math.round((Date.now()-new Date(c.entrada_at))/60000);
+          return`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            <div style="font-weight:500;font-size:13px">${c.empleado_nombre||'—'}</div>
+            <div style="font-size:12px;color:var(--success)">${minsToHHMM(mins)}</div>
+          </div>`;
+        }).join('')||'<div style="color:var(--muted);font-size:13px;padding:10px 0">Nadie fichado ahora</div>'}
+      </div>
+    </div>`;
+}
+
+// ── DISPOSITIVOS ──────────────────────────────────────────────────────────
+const DEVICE_TYPES={
+  valid:{label:'inout-valid',icon:'📡',url:'https://inout-valid.vercel.app',color:'var(--a3)'},
+  kiosk:{label:'inout-kiosk',icon:'🎟️',url:'https://inout-kiosk.vercel.app',color:'var(--a1)'},
+  register:{label:'inout-register',icon:'📝',url:'https://inout-register.vercel.app',color:'var(--a2)'},
+  staff:{label:'inout-staff',icon:'👷',url:'https://inout-staff.vercel.app',color:'var(--warn)'},
+  check:{label:'inout-check',icon:'🎫',url:'https://inout-check.vercel.app',color:'var(--muted)'},
+};
+
+async function renderDispositivos(pc){
+  pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando dispositivos…</div>`;
+  // Cargar dispositivos desde Supabase
+  const{data:devs}=await _sb.from('control_devices').select('*').order('last_seen',{ascending:false}).catch(()=>({data:[]}));
+  const devices=devs||[];
+
+  pc.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div style="font-family:Syne;font-size:20px;font-weight:700">${devices.length} dispositivos registrados</div>
+      <button class="btn btn-p" onclick="registrarDispositivo()">+ Registrar dispositivo</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
+      ${!devices.length?`
+        <div class="card" style="grid-column:1/-1;text-align:center;padding:40px">
+          <div style="font-size:40px;margin-bottom:12px">📱</div>
+          <div style="color:var(--muted);margin-bottom:16px">No hay dispositivos registrados aún.</div>
+          <div style="font-size:12px;color:var(--muted);max-width:400px;margin:0 auto;line-height:1.6">Para registrar un dispositivo, ábrelo desde ese dispositivo, entra con admin y pulsa "Registrar este dispositivo".</div>
+          <button class="btn btn-p" style="margin-top:16px" onclick="registrarDispositivo()">+ Registrar dispositivo</button>
+        </div>`
+      :devices.map(d=>{
+        const tipo=DEVICE_TYPES[d.type]||{label:d.type,icon:'📱',color:'var(--muted)'};
+        const lastSeen=d.last_seen?new Date(d.last_seen):null;
+        const isOnline=lastSeen&&(Date.now()-lastSeen.getTime())<300000; // online si visto en <5min
+        const lastSeenStr=lastSeen?lastSeen.toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'Nunca';
+        return`<div class="device-card ${isOnline?'online':'offline'}">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <div style="font-size:28px">${tipo.icon}</div>
+            <div style="flex:1">
+              <div style="font-family:Syne;font-size:14px;font-weight:600">${d.name||tipo.label}</div>
+              <div style="font-size:11px;color:var(--muted)">${d.location||'Sin ubicación'}</div>
+            </div>
+            <div class="device-status ${isOnline?'on':'off'}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Último acceso: ${lastSeenStr}</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-g" style="flex:1;font-size:12px;padding:7px" onclick="navigate('test');selectDeviceForTest('${d.id}')">🧪 Test</button>
+            <button class="btn btn-g" style="flex:1;font-size:12px;padding:7px" onclick="abrirDispositivo('${d.url||tipo.url}')">↗️ Abrir</button>
+            <button class="btn btn-danger" style="font-size:12px;padding:7px 10px" onclick="eliminarDispositivo('${d.id}')">✕</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function abrirDispositivo(url){ window.open(url,'_blank'); }
+
+function registrarDispositivo(){
+  const tipos=Object.entries(DEVICE_TYPES);
+  document.getElementById('modal-box').innerHTML=`
+    <div class="modal-title">📱 Registrar dispositivo</div>
+    <label class="form-lbl">Nombre del dispositivo</label>
+    <input class="form-input" id="dev-name" placeholder="Ej: Kiosco entrada principal"/>
+    <label class="form-lbl">Tipo</label>
+    <select class="form-select" id="dev-type">
+      ${tipos.map(([k,v])=>`<option value="${k}">${v.icon} ${v.label}</option>`).join('')}
+    </select>
+    <label class="form-lbl">Ubicación</label>
+    <input class="form-input" id="dev-location" placeholder="Ej: Entrada principal · Sala 1"/>
+    <label class="form-lbl">URL (opcional)</label>
+    <input class="form-input" id="dev-url" placeholder="https://..." style="font-family:monospace"/>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p" style="flex:2" onclick="guardarDispositivo()">Registrar</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('show');
+  setTimeout(()=>document.getElementById('dev-name')?.focus(),80);
+}
+
+async function guardarDispositivo(){
+  const name=document.getElementById('dev-name')?.value?.trim();
+  const type=document.getElementById('dev-type')?.value;
+  const location=document.getElementById('dev-location')?.value?.trim()||null;
+  const url=document.getElementById('dev-url')?.value?.trim()||null;
+  if(!name){toast('Introduce un nombre');return;}
+  const{error}=await _sb.from('control_devices').insert({name,type,location,url,registered_by:userProfile.nombre,last_seen:new Date().toISOString()});
+  if(error){
+    if(error.code==='42P01'){
+      toast('⚠️ Tabla control_devices no existe. Ejecuta el SQL migration.');
+    } else { toast('Error: '+error.message); }
+    return;
+  }
+  closeModal();toast(`"${name}" registrado ✓`);renderDispositivos(document.getElementById('page-content'));
+}
+
+async function eliminarDispositivo(id){
+  await _sb.from('control_devices').delete().eq('id',id);
+  toast('Dispositivo eliminado');renderDispositivos(document.getElementById('page-content'));
+}
+
+// ── TEST REMOTO ───────────────────────────────────────────────────────────
+let _testDevice=null, _testLogs=[];
+
+function selectDeviceForTest(id){
+  // Llamado desde Dispositivos cuando se pulsa el botón Test
+  setTimeout(()=>{
+    const sel=document.getElementById('test-device-sel');
+    if(sel) sel.value=id;
+  },200);
+}
+
+async function renderTest(pc){
+  const{data:devs}=await _sb.from('control_devices').select('*').order('name').catch(()=>({data:[]}));
+  const devices=devs||[];
+
+  pc.innerHTML=`
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">🧪 Test remoto de dispositivos</div>
+    <div class="g2">
+      <div>
+        <div class="card mb16">
+          <div class="card-title">Seleccionar dispositivo</div>
+          <select class="form-select" id="test-device-sel" onchange="onSelectTestDevice(this.value)">
+            <option value="">— Selecciona un dispositivo —</option>
+            ${devices.map(d=>`<option value="${d.id}">${d.name} (${d.type})</option>`).join('')}
+          </select>
+          <div id="test-device-info" style="font-size:12px;color:var(--muted)">Selecciona un dispositivo para ver su estado</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Tests disponibles</div>
+          <div id="test-buttons" style="display:flex;flex-direction:column;gap:8px">
+            <div style="color:var(--muted);font-size:13px">Selecciona un dispositivo primero</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="card-title">Log de test</div>
+          <div class="test-log" id="test-log"><span class="info">Esperando…</span></div>
+          <button class="btn btn-g btn-full" style="margin-top:10px;font-size:12px" onclick="clearTestLog()">Limpiar log</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function onSelectTestDevice(id){
+  if(!id){document.getElementById('test-device-info').textContent='Selecciona un dispositivo';document.getElementById('test-buttons').innerHTML='<div style="color:var(--muted);font-size:13px">Selecciona un dispositivo primero</div>';return;}
+  _testDevice=id;
+  document.getElementById('test-device-info').textContent='Dispositivo seleccionado — ejecuta los tests';
+  document.getElementById('test-buttons').innerHTML=`
+    <button class="btn btn-p" onclick="runTest('ping')">🏓 Ping — conexión Supabase</button>
+    <button class="btn btn-g" onclick="runTest('wristband')">📡 Crear pulsera de test (se elimina en 5 min)</button>
+    <button class="btn btn-g" onclick="runTest('transaction')">💳 Test transacción (0,01€)</button>
+    <button class="btn btn-g" onclick="runTest('access')">🚪 Test control de acceso</button>
+    <button class="btn btn-danger" onclick="runTest('cleanup')">🗑️ Limpiar datos de test</button>`;
+}
+
+function logTest(msg,type='info'){
+  const log=document.getElementById('test-log');if(!log)return;
+  const line=document.createElement('div');
+  line.className=type;line.textContent=`[${new Date().toLocaleTimeString('es-ES')}] ${msg}`;
+  log.appendChild(line);log.scrollTop=log.scrollHeight;
+  _testLogs.push({msg,type,ts:Date.now()});
+}
+function clearTestLog(){const l=document.getElementById('test-log');if(l)l.innerHTML='<span class="info">Log limpiado</span>';_testLogs=[];}
+
+const TEST_UID='TEST-CTRL-'+Math.random().toString(36).slice(2,8).toUpperCase();
+
+async function runTest(type){
+  if(!_testDevice&&type!=='ping'){logTest('Selecciona un dispositivo primero','warn');return;}
+  logTest(`Iniciando test: ${type}…`,'info');
+
+  try{
+    if(type==='ping'){
+      const t0=Date.now();
+      const{data,error}=await _sb.from('rfid_wristbands').select('id').limit(1);
+      if(error) throw error;
+      logTest(`✓ Supabase responde en ${Date.now()-t0}ms`,'ok');
+    }
+    else if(type==='wristband'){
+      logTest(`Creando pulsera temporal UID: ${TEST_UID}`,'info');
+      const{error}=await _sb.from('rfid_wristbands').insert({uid:TEST_UID,holder_name:'[TEST] Control Admin',status:'active',balance:10,total_loaded:10,total_spent:0,registered_by:'inout-control-test'});
+      if(error) throw error;
+      logTest(`✓ Pulsera test creada (UID: ${TEST_UID})`,'ok');
+      logTest('⏳ Se eliminará en 5 minutos…','warn');
+      setTimeout(()=>runTest('cleanup'),300000);
+    }
+    else if(type==='transaction'){
+      const{data:wb}=await _sb.from('rfid_wristbands').select('id,balance').eq('uid',TEST_UID).maybeSingle();
+      if(!wb){logTest('Crea primero la pulsera de test','warn');return;}
+      const newBal=parseFloat(wb.balance)-0.01;
+      await _sb.from('rfid_wristbands').update({balance:newBal}).eq('id',wb.id);
+      await _sb.from('rfid_transactions').insert({wristband_id:wb.id,type:'purchase',amount:-0.01,balance_after:newBal,description:'[TEST] Control Admin',operator:'inout-control-test'});
+      logTest(`✓ Transacción test OK — Nuevo saldo: ${fmt(newBal)}€`,'ok');
+    }
+    else if(type==='access'){
+      const{data:wb}=await _sb.from('rfid_wristbands').select('id').eq('uid',TEST_UID).maybeSingle();
+      if(!wb){logTest('Crea primero la pulsera de test','warn');return;}
+      await _sb.from('rfid_access_log').insert({wristband_id:wb.id,direction:'in',gate:'[TEST]',operator:'inout-control-test'});
+      logTest(`✓ Acceso test registrado (ENTRADA)`,'ok');
+    }
+    else if(type==='cleanup'){
+      logTest('Eliminando datos de test…','info');
+      const{data:wb}=await _sb.from('rfid_wristbands').select('id').eq('uid',TEST_UID).maybeSingle();
+      if(wb){
+        await _sb.from('rfid_access_log').delete().eq('wristband_id',wb.id).eq('operator','inout-control-test');
+        await _sb.from('rfid_transactions').delete().eq('wristband_id',wb.id).eq('operator','inout-control-test');
+        await _sb.from('rfid_wristbands').delete().eq('id',wb.id);
+        logTest('✓ Pulsera y datos de test eliminados','ok');
+      } else { logTest('No hay datos de test que limpiar','info'); }
+    }
+  }catch(e){ logTest('✗ Error: '+e.message,'err'); }
+}
+
+// ── EMPLEADOS ─────────────────────────────────────────────────────────────
+async function renderEmpleados(pc){
+  await cargarEmpleados();
+  pc.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div style="font-family:Syne;font-size:20px;font-weight:700">${_empleados.length} empleados</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="renderEmpleados(document.getElementById('page-content'))">↺ Refrescar</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Nombre</th><th>Nº Emp.</th><th>Rol</th><th>Dpto.</th><th>IRPF</th><th>Staff</th><th>Estado</th></tr></thead>
+        <tbody>${_empleados.map(e=>`<tr>
+          <td><div style="font-weight:500">${e.nombre}</div><div style="font-size:11px;color:var(--muted)">${e.email}</div></td>
+          <td style="font-family:monospace;font-size:12px;color:var(--a3)">${e.numero_empleado||'—'}</td>
+          <td><span class="badge b-gray" style="font-size:10px">${e.role}</span></td>
+          <td style="color:var(--muted)">${e.departamento||'—'}</td>
+          <td style="color:var(--a1)">${e.irpf||15}%</td>
+          <td>${e.staff_pin?'<span class="badge b-green" style="font-size:10px">🔢</span> ':''} ${e.staff_uid?'<span class="badge b-blue" style="font-size:10px">📡</span>':''}</td>
+          <td><span class="badge ${e.estado==='activo'?'b-green':'b-gray'}">${e.estado||'activo'}</span></td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>
+    <div style="margin-top:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:9px;font-size:12px;color:var(--muted)">
+      ℹ️ Gestión completa de empleados (crear, editar, nóminas) está en <a href="https://inout-connect.vercel.app" target="_blank" style="color:var(--a3)">inout-connect</a>.
+    </div>`;
+}
+
+// ── EVENTOS ───────────────────────────────────────────────────────────────
+async function renderEventos(pc){
+  await cargarEventos();
+  pc.innerHTML=`
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">${_eventos.length} eventos</div>
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Nombre</th><th>Fecha</th><th>Lugar</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <tbody>${_eventos.map(e=>`<tr>
+          <td style="font-weight:500">${e.nombre}</td>
+          <td style="font-size:12px;color:var(--muted)">${(e.fecha_inicio||'').slice(0,10)}</td>
+          <td style="font-size:12px;color:var(--muted)">${e.venue_nombre||'—'}${e.venue_ciudad?', '+e.venue_ciudad:''}</td>
+          <td><span class="badge ${e.estado==='publicado'?'b-green':e.estado==='cancelado'?'b-red':'b-gray'}">${e.estado}</span></td>
+          <td>
+            <button class="btn btn-g" style="padding:5px 10px;font-size:11px" onclick="verStatsEvento('${e.id}','${e.nombre.replace(/'/g,"\\''")}')">📊 Stats</button>
+          </td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+async function verStatsEvento(eventId, eventName){
+  document.getElementById('modal-box').innerHTML=`<div class="modal-title">📊 ${eventName}</div><div style="color:var(--muted)">Cargando…</div>`;
+  document.getElementById('modal-overlay').classList.add('show');
+  const[{data:wbs},{data:txs},{data:accs}]=await Promise.all([
+    _sb.from('rfid_wristbands').select('balance,status').eq('event_id',eventId),
+    _sb.from('rfid_transactions').select('type,amount').eq('event_id',eventId),
+    _sb.from('rfid_access_log').select('direction').eq('event_id',eventId),
+  ]);
+  const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
+  const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const totalPur=(txs||[]).filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
+  const ins=(accs||[]).filter(a=>a.direction==='in').length;
+  const outs=(accs||[]).filter(a=>a.direction==='out').length;
+  document.getElementById('modal-box').innerHTML=`
+    <div class="modal-title">📊 ${eventName}</div>
+    <div class="g2 mb16">
+      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Pulseras activas</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--a1)">${(wbs||[]).length}</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Saldo en circulación</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--a1)">${fmt(totalBal)}€</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Total recargado</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--success)">${fmt(totalTop)}€</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Total consumido</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--a2)">${fmt(totalPur)}€</div></div>
+    </div>
+    <div style="padding:14px;background:var(--bg);border-radius:9px;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Accesos totales</div>
+      <div style="display:flex;gap:16px">
+        <span style="color:var(--success)">↗ ${ins} entradas</span>
+        <span style="color:var(--a3)">↙ ${outs} salidas</span>
+        <span style="color:var(--warn)">Dentro: ${Math.max(0,ins-outs)}</span>
+      </div>
+    </div>
+    <button class="btn btn-g btn-full" onclick="closeModal()">Cerrar</button>`;
+}
+
+// ── PULSERAS ──────────────────────────────────────────────────────────────
+async function renderPulseras(pc){
+  pc.innerHTML='<div style="color:var(--muted)">Cargando pulseras…</div>';
+  const{data:wbs}=await _sb.from('rfid_wristbands').select('*').order('created_at',{ascending:false}).limit(100);
+  pc.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="font-family:Syne;font-size:20px;font-weight:700">${(wbs||[]).length} pulseras</div>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>UID</th><th>Titular</th><th>Saldo</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
+        <tbody>${(wbs||[]).map(w=>`<tr>
+          <td style="font-family:monospace;font-size:12px;color:var(--a3)">${w.uid}</td>
+          <td style="font-weight:500">${w.holder_name||'Sin nombre'}</td>
+          <td style="color:var(--a1);font-weight:600">${fmt(w.balance)}€</td>
+          <td><span class="badge ${w.status==='active'?'b-green':'b-red'}">${w.status}</span></td>
+          <td style="font-size:12px;color:var(--muted)">${w.last_used_at?new Date(w.last_used_at).toLocaleDateString('es-ES'):'—'}</td>
+          <td>
+            <button class="btn btn-g" style="padding:4px 8px;font-size:11px" onclick="toggleWristband('${w.id}','${w.status}')">${w.status==='active'?'🔒 Bloquear':'🔓 Activar'}</button>
+          </td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+async function toggleWristband(id, currentStatus){
+  const newStatus=currentStatus==='active'?'blocked':'active';
+  await _sb.from('rfid_wristbands').update({status:newStatus}).eq('id',id);
+  toast(`Pulsera ${newStatus==='active'?'activada':'bloqueada'} ✓`);
+  renderPulseras(document.getElementById('page-content'));
+}
+
+// ── FICHAJES ──────────────────────────────────────────────────────────────
+async function renderFichajes(pc){
+  pc.innerHTML='<div style="color:var(--muted)">Cargando fichajes…</div>';
+  const weekStart=new Date(); weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7)); weekStart.setHours(0,0,0,0);
+  const{data:fichs}=await _sb.from('staff_checkins')
+    .select('*, empleados(nombre,departamento)')
+    .gte('entrada_at',weekStart.toISOString())
+    .order('entrada_at',{ascending:false}).limit(200)
+    .catch(()=>({data:[]}));
+  const data=fichs||[];
+  pc.innerHTML=`
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">Fichajes — semana actual</div>
+    ${!data.length?'<div class="card" style="text-align:center;padding:40px;color:var(--muted)">Sin fichajes esta semana. Ejecuta el SQL migration de staff.</div>':`
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Empleado</th><th>Dept.</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Estado</th></tr></thead>
+        <tbody>${data.map(f=>`<tr>
+          <td style="font-weight:500">${f.empleados?.nombre||f.empleado_nombre||'—'}</td>
+          <td style="color:var(--muted)">${f.empleados?.departamento||'—'}</td>
+          <td style="font-size:12px">${new Date(f.entrada_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+          <td style="font-size:12px">${f.salida_at?new Date(f.salida_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—'}</td>
+          <td style="color:var(--a1)">${f.minutos?minsToHHMM(f.minutos):'En curso'}</td>
+          <td><span class="badge ${f.salida_at?'b-gray':'b-green'}">${f.salida_at?'Cerrado':'Activo'}</span></td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`}`;
+}
+
+// ── INFORMES ──────────────────────────────────────────────────────────────
+async function renderInformes(pc){
+  pc.innerHTML='<div style="color:var(--muted)">Cargando informes…</div>';
+  const{data:informes}=await _sb.from('staff_weekly_reports')
+    .select('*').order('semana_inicio',{ascending:false}).limit(12)
+    .catch(()=>({data:[]}));
+
+  pc.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="font-family:Syne;font-size:20px;font-weight:700">Informes semanales</div>
+      <button class="btn btn-p" onclick="generarInformeSemana()">⚡ Generar informe ahora</button>
+    </div>
+    ${!(informes||[]).length?`
+      <div class="card" style="text-align:center;padding:40px">
+        <div style="font-size:36px;margin-bottom:12px">📊</div>
+        <div style="color:var(--muted)">Sin informes generados aún.</div>
+        <button class="btn btn-p" style="margin-top:16px" onclick="generarInformeSemana()">⚡ Generar primer informe</button>
+      </div>`
+    :`<div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Semana</th><th>Empleados</th><th>Horas totales</th><th>Generado</th></tr></thead>
+        <tbody>${(informes||[]).map(i=>`<tr>
+          <td style="font-weight:500">Semana del ${new Date(i.semana_inicio).toLocaleDateString('es-ES',{day:'numeric',month:'long'})}</td>
+          <td style="color:var(--a3)">${i.total_empleados}</td>
+          <td style="color:var(--a1)">${minsToHHMM(i.total_minutos||0)}</td>
+          <td style="font-size:12px;color:var(--muted)">${new Date(i.generado_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`}`;
+}
+
+async function generarInformeSemana(){
+  const weekStart=new Date(); weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7)); weekStart.setHours(0,0,0,0);
+  const{data:fichs}=await _sb.from('staff_checkins').select('empleado_id,minutos').gte('entrada_at',weekStart.toISOString()).not('minutos','is',null).catch(()=>({data:[]}));
+  if(!fichs||!fichs.length){toast('Sin datos de fichaje esta semana');return;}
+  const emps=new Set(fichs.map(f=>f.empleado_id)).size;
+  const totalMins=fichs.reduce((s,f)=>s+(f.minutos||0),0);
+  const{error}=await _sb.from('staff_weekly_reports').upsert({semana_inicio:weekStart.toISOString(),total_empleados:emps,total_minutos:totalMins,generado_at:new Date().toISOString()},{onConflict:'semana_inicio'}).catch(e=>({error:e}));
+  if(error){toast('Error: '+(error.message||'tabla no existe, ejecuta SQL migration'));return;}
+  toast(`Informe generado ✓ — ${emps} empleados · ${minsToHHMM(totalMins)}`);
+  renderInformes(document.getElementById('page-content'));
+}
+
+// ── TRANSACCIONES ─────────────────────────────────────────────────────────
+async function renderTransacciones(pc){
+  pc.innerHTML='<div style="color:var(--muted)">Cargando…</div>';
+  const{data:txs}=await _sb.from('rfid_transactions')
+    .select('*, rfid_wristbands(holder_name,uid)')
+    .order('created_at',{ascending:false}).limit(150);
+  const datos=txs||[];
+  const totalTop=datos.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const totalPur=datos.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
+  pc.innerHTML=`
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:14px">Últimas ${datos.length} transacciones</div>
+    <div class="g2 mb16">
+      <div class="stat"><div class="stat-lbl">Total recargado</div><div class="stat-val" style="color:var(--success);font-size:20px">${fmt(totalTop)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Total consumido</div><div class="stat-val" style="color:var(--a2);font-size:20px">${fmt(totalPur)}€</div></div>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Pulsera</th><th>Tipo</th><th>Concepto</th><th>Importe</th><th>Saldo post</th><th>Operador</th></tr></thead>
+        <tbody>${datos.map(t=>`<tr>
+          <td style="font-size:12px;color:var(--muted);white-space:nowrap">${fmtDate(t.created_at)}</td>
+          <td style="font-size:12px">${t.rfid_wristbands?.holder_name||t.rfid_wristbands?.uid||'—'}</td>
+          <td><span class="badge ${t.type==='topup'?'b-green':'b-red'}">${t.type}</span></td>
+          <td style="font-size:12px">${t.description||'—'}</td>
+          <td style="font-weight:600;color:${t.amount>=0?'var(--success)':'var(--danger)'}">${t.amount>=0?'+':''}${fmt(t.amount)}€</td>
+          <td style="font-size:12px;color:var(--muted)">${fmt(t.balance_after)}€</td>
+          <td style="font-size:12px;color:var(--muted)">${t.operator||'—'}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+// ── AUTO-LOGIN ─────────────────────────────────────────────────────────────
+(async function(){
+  const{data:{session}}=await _sb.auth.getSession();
+  if(session?.user){
+    const{data:p}=await _sb.from('empleados').select('*').eq('auth_user_id',session.user.id).single();
+    if(p&&p.role==='admin'){
+      currentUser=session.user;
+      userProfile={nombre:p.nombre,role:p.role,email:p.email,id:p.id,_sbId:p.id};
+      enterApp(); return;
+    }
+  }
+  document.getElementById('login-screen').style.display='flex';
+})();
 </script>
-
 </body>
 </html>
