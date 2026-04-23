@@ -148,7 +148,7 @@ const SB_KEY='sb_publishable__-K1pC4bOJHRf8JQ__OOzg_jqLxlGla';
 const _sb=supabase.createClient(SB_URL,SB_KEY);
 
 let currentUser=null, userProfile=null, currentPage='dashboard';
-let _empleados=[], _eventos=[], _checkins=[];
+let _empleados=[], _eventos=[], _checkins=[], _orgsCache=[];
 
 const NAV=[
   {sec:'Panel'},
@@ -711,7 +711,7 @@ async function renderClientes(pc){
   let orgs=[], admins=[];
   try{
     const{data:d1,error:e1}=await _sb.from('organizations').select('id,slug,nombre').order('nombre');
-    if(!e1) orgs=d1||[];
+    if(!e1){ orgs=d1||[]; _orgsCache=orgs; }
     const{data:d2,error:e2}=await _sb.from('empleados').select('*').in('role',['admin','rrhh']).not('org_id','is',null);
     if(!e2) admins=d2||[];
   }catch(_){}
@@ -752,8 +752,16 @@ async function renderClientes(pc){
     </div>`;
 }
 
-async function modalNuevoClienteAdmin(orgs){
-  if(!orgs||!orgs.length){toast('Crea una organización primero');navigate('organizaciones');return;}
+async function modalNuevoClienteAdmin(){
+  // Si no tenemos orgs en cache, cargarlas ahora
+  if(!_orgsCache.length){
+    try{
+      const{data,error}=await _sb.from('organizations').select('id,slug,nombre').order('nombre');
+      if(!error) _orgsCache=data||[];
+    }catch(_){}
+  }
+  const orgs=_orgsCache;
+  if(!orgs.length){toast('Crea una organización primero');navigate('organizaciones');return;}
   document.getElementById('modal-box').innerHTML=`
     <div class="modal-title">👤 Dar acceso a cliente admin</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.5">
@@ -960,43 +968,131 @@ async function renderFichajes(pc){
     </div>`}`;
 }
 
-// ── INFORMES ──────────────────────────────────────────────────────────────
+// ── INFORMES ─────────────────────────────────────────────────────────────
+let _informeTab='sistema';
+
 async function renderInformes(pc){
-  pc.innerHTML='<div style="color:var(--muted)">Cargando informes…</div>';
-  let informes=[];
+  pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando…</div>';
+  let orgs=[], informesStaff=[], wbs=[], txs=[];
   try{
-    const{data:inf_data,error}=await _sb.from('staff_weekly_reports')
-      .select('*').order('semana_inicio',{ascending:false}).limit(12);
-    if(!error) informes=inf_data||[];
+    const[r1,r2,r3,r4]=await Promise.all([
+      _sb.from('organizations').select('id,slug,nombre').order('nombre'),
+      _sb.from('staff_weekly_reports').select('*').order('semana_inicio',{ascending:false}).limit(20),
+      _sb.from('rfid_wristbands').select('balance,status,org_id'),
+      _sb.from('rfid_transactions').select('type,amount,org_id,created_at').order('created_at',{ascending:false}).limit(500),
+    ]);
+    if(!r1.error) orgs=r1.data||[];
+    if(!r2.error) informesStaff=r2.data||[];
+    if(!r3.error) wbs=r3.data||[];
+    if(!r4.error) txs=r4.data||[];
   }catch(_){}
 
+  const totalBal=wbs.reduce((s,w)=>s+parseFloat(w.balance||0),0);
+  const totalTop=txs.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const totalPur=txs.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
+
+  const orgStats={};
+  orgs.forEach(o=>{
+    const owbs=wbs.filter(w=>w.org_id===o.id);
+    const otxs=txs.filter(t=>t.org_id===o.id);
+    orgStats[o.id]={
+      nombre:o.nombre,slug:o.slug,
+      saldo:owbs.reduce((s,w)=>s+parseFloat(w.balance||0),0),
+      pulseras:owbs.length,
+      recargado:otxs.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0),
+      consumido:otxs.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0),
+      txCount:otxs.length,
+    };
+  });
+
   pc.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div style="font-family:Syne;font-size:20px;font-weight:700">Informes semanales</div>
-      <button class="btn btn-p" onclick="generarInformeSemana()">⚡ Generar informe ahora</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div style="font-family:Syne;font-size:20px;font-weight:700">Informes</div>
+      <button class="btn btn-p" onclick="generarInformeSemana()">⚡ Generar informe staff</button>
     </div>
-    ${!(informes||[]).length?`
-      <div class="card" style="text-align:center;padding:40px">
-        <div style="font-size:36px;margin-bottom:12px">📊</div>
-        <div style="color:var(--muted)">Sin informes generados aún.</div>
-        <button class="btn btn-p" style="margin-top:16px" onclick="generarInformeSemana()">⚡ Generar primer informe</button>
-      </div>`
-    :`<div class="card">
-      <div class="tbl-wrap"><table>
-        <thead><tr><th>Semana</th><th>Empleados</th><th>Horas totales</th><th>Generado</th></tr></thead>
-        <tbody>${(informes||[]).map(i=>`<tr>
-          <td style="font-weight:500">Semana del ${new Date(i.semana_inicio).toLocaleDateString('es-ES',{day:'numeric',month:'long'})}</td>
-          <td style="color:var(--a3)">${i.total_empleados}</td>
-          <td style="color:var(--a1)">${minsToHHMM(i.total_minutos||0)}</td>
-          <td style="font-size:12px;color:var(--muted)">${new Date(i.generado_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
-        </tr>`).join('')}
-        </tbody>
-      </table></div>
-    </div>`}`;
+    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
+      <button class="btn ${_informeTab==='sistema'?'btn-p':'btn-g'}" onclick="_informeTab='sistema';renderInformes(document.getElementById('page-content'))" style="font-size:12px;padding:7px 14px">🌐 Global</button>
+      <button class="btn ${_informeTab==='org'?'btn-p':'btn-g'}" onclick="_informeTab='org';renderInformes(document.getElementById('page-content'))" style="font-size:12px;padding:7px 14px">🏢 Por organización</button>
+      <button class="btn ${_informeTab==='staff'?'btn-p':'btn-g'}" onclick="_informeTab='staff';renderInformes(document.getElementById('page-content'))" style="font-size:12px;padding:7px 14px">👷 Fichajes staff</button>
+    </div>
+    <div id="informe-body">
+      ${_informeTab==='sistema'?buildInformeSistema(totalBal,totalTop,totalPur,txs,wbs):''}
+      ${_informeTab==='org'?buildInformeOrgs(orgStats):''}
+      ${_informeTab==='staff'?buildInformeStaff(informesStaff):''}
+    </div>`;
+}
+
+function buildInformeSistema(totalBal,totalTop,totalPur,txs,wbs){
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const txHoy=txs.filter(t=>new Date(t.created_at)>=hoy);
+  const topHoy=txHoy.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const purHoy=txHoy.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
+  return `
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Saldo en circulación</div><div class="stat-val" style="color:var(--a1);font-size:20px">${fmt(totalBal)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Total recargado</div><div class="stat-val" style="color:var(--success);font-size:20px">${fmt(totalTop)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Total consumido</div><div class="stat-val" style="color:var(--a2);font-size:20px">${fmt(totalPur)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Pulseras activas</div><div class="stat-val" style="color:var(--a3)">${wbs.filter(w=>w.status==='active').length}</div></div>
+    </div>
+    <div class="g2">
+      <div class="card"><div class="card-title">Hoy</div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span>Recargado</span><strong style="color:var(--success)">${fmt(topHoy)}€</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0"><span>Consumido</span><strong style="color:var(--a2)">${fmt(purHoy)}€</strong></div>
+      </div>
+      <div class="card"><div class="card-title">Balance global</div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span>Recargado</span><strong>${fmt(totalTop)}€</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span>Consumido</span><strong style="color:var(--a2)">-${fmt(totalPur)}€</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0"><span style="font-weight:600">Saldo retenido</span><strong style="color:var(--a1)">${fmt(totalTop-totalPur)}€</strong></div>
+      </div>
+    </div>`;
+}
+
+function buildInformeOrgs(orgStats){
+  const items=Object.values(orgStats);
+  if(!items.length) return `<div class="card" style="text-align:center;padding:40px"><div style="font-size:36px;margin-bottom:12px">🏢</div><div style="color:var(--muted)">Sin organizaciones aún. Ejecuta el Bloque B y C del migration SQL.</div></div>`;
+  return `<div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Organización</th><th>Pulseras</th><th>Saldo</th><th>Recargado</th><th>Consumido</th><th>Tx</th></tr></thead>
+    <tbody>
+    ${items.map(o=>`<tr>
+      <td><div style="font-weight:600">${o.nombre}</div><div style="font-size:11px;color:var(--muted);font-family:monospace">/${o.slug}</div></td>
+      <td style="color:var(--a3)">${o.pulseras}</td>
+      <td style="color:var(--a1);font-weight:600">${fmt(o.saldo)}€</td>
+      <td style="color:var(--success)">${fmt(o.recargado)}€</td>
+      <td style="color:var(--a2)">${fmt(o.consumido)}€</td>
+      <td style="color:var(--muted)">${o.txCount}</td>
+    </tr>`).join('')}
+    <tr style="border-top:2px solid var(--border)">
+      <td style="font-weight:700">TOTAL</td>
+      <td style="font-weight:700;color:var(--a3)">${items.reduce((s,o)=>s+o.pulseras,0)}</td>
+      <td style="font-weight:700;color:var(--a1)">${fmt(items.reduce((s,o)=>s+o.saldo,0))}€</td>
+      <td style="font-weight:700;color:var(--success)">${fmt(items.reduce((s,o)=>s+o.recargado,0))}€</td>
+      <td style="font-weight:700;color:var(--a2)">${fmt(items.reduce((s,o)=>s+o.consumido,0))}€</td>
+      <td style="font-weight:700;color:var(--muted)">${items.reduce((s,o)=>s+o.txCount,0)}</td>
+    </tr>
+    </tbody></table></div></div>`;
+}
+
+function buildInformeStaff(informes){
+  if(!informes.length) return `<div class="card" style="text-align:center;padding:40px"><div style="font-size:36px;margin-bottom:12px">👷</div><div style="color:var(--muted);margin-bottom:16px">Sin informes de fichaje. Ejecuta el SQL migration de staff.</div><button class="btn btn-p" onclick="generarInformeSemana()">⚡ Generar ahora</button></div>`;
+  return `<div class="card"><div class="tbl-wrap"><table>
+    <thead><tr><th>Semana</th><th>Empleados</th><th>Horas totales</th><th>Media/empleado</th><th>Generado</th></tr></thead>
+    <tbody>${informes.map(i=>{
+      const media=i.total_empleados>0?Math.round((i.total_minutos||0)/i.total_empleados):0;
+      return`<tr>
+        <td style="font-weight:500">Semana del ${new Date(i.semana_inicio).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})}</td>
+        <td style="color:var(--a3)">${i.total_empleados}</td>
+        <td style="color:var(--a1);font-weight:600">${minsToHHMM(i.total_minutos||0)}</td>
+        <td style="color:var(--muted)">${minsToHHMM(media)}</td>
+        <td style="font-size:12px;color:var(--muted)">${new Date(i.generado_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div></div>`;
 }
 
 async function generarInformeSemana(){
-  const weekStart=new Date(); weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7)); weekStart.setHours(0,0,0,0);
+  const weekStart=new Date();
+  weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
+  weekStart.setHours(0,0,0,0);
   let fichs=[];
   try{
     const{data:fd,error}=await _sb.from('staff_checkins').select('empleado_id,minutos').gte('entrada_at',weekStart.toISOString()).not('minutos','is',null);
@@ -1008,9 +1104,9 @@ async function generarInformeSemana(){
   const{error}=await _sb.from('staff_weekly_reports').upsert({semana_inicio:weekStart.toISOString(),total_empleados:emps,total_minutos:totalMins,generado_at:new Date().toISOString()},{onConflict:'semana_inicio'}).catch(e=>({error:e}));
   if(error){toast('Error: '+(error.message||'tabla no existe, ejecuta SQL migration'));return;}
   toast(`Informe generado ✓ — ${emps} empleados · ${minsToHHMM(totalMins)}`);
+  _informeTab='staff';
   renderInformes(document.getElementById('page-content'));
 }
-
 // ── TRANSACCIONES ─────────────────────────────────────────────────────────
 async function renderTransacciones(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando…</div>';
