@@ -505,16 +505,32 @@ async function runTest(type){
 
 // ── ORGANIZACIONES (multi-tenant) ───────────────────────────────────────
 async function renderOrganizaciones(pc){
-  pc.innerHTML='<div style="color:var(--muted)">Cargando organizaciones…</div>';
-  const{data:orgs}=await _sb.from('organizations').select('*').order('created_at',{ascending:false}).catch(()=>({data:null}));
+  pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando organizaciones…</div>';
+  
+  let orgs = null;
+  let fetchError = null;
+  
+  try{
+    const{data, error} = await _sb.from('organizations')
+      .select('*')
+      .order('created_at',{ascending:false});
+    if(error) throw error;
+    orgs = data || [];
+  }catch(e){
+    fetchError = e.message;
+  }
 
-  if(!orgs){
+  if(fetchError){
     pc.innerHTML=`<div class="card" style="text-align:center;padding:40px">
-      <div style="font-size:40px;margin-bottom:12px">🏢</div>
-      <div style="color:var(--muted);margin-bottom:16px">Tabla <code>organizations</code> no existe aún.</div>
-      <div style="font-size:13px;color:var(--muted);max-width:420px;margin:0 auto;line-height:1.6">
-        Ejecuta <strong>supabase-multitenant-migration.sql</strong> en Supabase para activar el sistema multi-tenant.
+      <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+      <div style="font-family:Syne;font-size:16px;font-weight:700;margin-bottom:8px">Error al cargar organizaciones</div>
+      <div style="font-size:13px;color:var(--danger);margin-bottom:16px;font-family:monospace">${fetchError}</div>
+      <div style="font-size:13px;color:var(--muted);max-width:440px;margin:0 auto;line-height:1.6;margin-bottom:20px">
+        Posibles causas:<br>
+        · La tabla <code>organizations</code> no existe → ejecuta el <strong>Bloque A</strong> del migration SQL<br>
+        · Política RLS bloquea la lectura → ejecuta el <strong>Bloque A</strong> que añade <code>allow_all_orgs</code>
       </div>
+      <button class="btn btn-p" onclick="renderOrganizaciones(document.getElementById('page-content'))">🔄 Reintentar</button>
     </div>`;
     return;
   }
