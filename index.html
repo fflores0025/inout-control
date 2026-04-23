@@ -304,8 +304,11 @@ const DEVICE_TYPES={
 async function renderDispositivos(pc){
   pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando dispositivos…</div>`;
   // Cargar dispositivos desde Supabase
-  const{data:devs}=await _sb.from('control_devices').select('*').order('last_seen',{ascending:false}).catch(()=>({data:[]}));
-  const devices=devs||[];
+  let devices=[];
+  try{
+    const{data:devs,error}=await _sb.from('control_devices').select('*').order('last_seen',{ascending:false});
+    if(!error) devices=devs||[];
+  }catch(_){}
 
   pc.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
@@ -402,8 +405,11 @@ function selectDeviceForTest(id){
 }
 
 async function renderTest(pc){
-  const{data:devs}=await _sb.from('control_devices').select('*').order('name').catch(()=>({data:[]}));
-  const devices=devs||[];
+  let devices=[];
+  try{
+    const{data,error}=await _sb.from('control_devices').select('*').order('name');
+    if(!error) devices=data||[];
+  }catch(_){}
 
   pc.innerHTML=`
     <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">🧪 Test remoto de dispositivos</div>
@@ -702,8 +708,13 @@ function abrirTaquillaOrg(slug){
 // ── CLIENTES ADMIN ────────────────────────────────────────────────────────
 async function renderClientes(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando…</div>';
-  const{data:orgs}=await _sb.from('organizations').select('id,slug,nombre').order('nombre').catch(()=>({data:[]}));
-  const{data:admins}=await _sb.from('empleados').select('*').in('role',['admin','rrhh']).not('org_id','is',null).catch(()=>({data:[]}));
+  let orgs=[], admins=[];
+  try{
+    const{data:d1,error:e1}=await _sb.from('organizations').select('id,slug,nombre').order('nombre');
+    if(!e1) orgs=d1||[];
+    const{data:d2,error:e2}=await _sb.from('empleados').select('*').in('role',['admin','rrhh']).not('org_id','is',null);
+    if(!e2) admins=d2||[];
+  }catch(_){}
 
   pc.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
@@ -922,12 +933,14 @@ async function toggleWristband(id, currentStatus){
 async function renderFichajes(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando fichajes…</div>';
   const weekStart=new Date(); weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7)); weekStart.setHours(0,0,0,0);
-  const{data:fichs}=await _sb.from('staff_checkins')
-    .select('*, empleados(nombre,departamento)')
-    .gte('entrada_at',weekStart.toISOString())
-    .order('entrada_at',{ascending:false}).limit(200)
-    .catch(()=>({data:[]}));
-  const data=fichs||[];
+  let data=[];
+  try{
+    const{data:fichs,error}=await _sb.from('staff_checkins')
+      .select('*, empleados(nombre,departamento)')
+      .gte('entrada_at',weekStart.toISOString())
+      .order('entrada_at',{ascending:false}).limit(200);
+    if(!error) data=fichs||[];
+  }catch(_){}
   pc.innerHTML=`
     <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">Fichajes — semana actual</div>
     ${!data.length?'<div class="card" style="text-align:center;padding:40px;color:var(--muted)">Sin fichajes esta semana. Ejecuta el SQL migration de staff.</div>':`
@@ -950,9 +963,12 @@ async function renderFichajes(pc){
 // ── INFORMES ──────────────────────────────────────────────────────────────
 async function renderInformes(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando informes…</div>';
-  const{data:informes}=await _sb.from('staff_weekly_reports')
-    .select('*').order('semana_inicio',{ascending:false}).limit(12)
-    .catch(()=>({data:[]}));
+  let informes=[];
+  try{
+    const{data:inf_data,error}=await _sb.from('staff_weekly_reports')
+      .select('*').order('semana_inicio',{ascending:false}).limit(12);
+    if(!error) informes=inf_data||[];
+  }catch(_){}
 
   pc.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
@@ -981,8 +997,12 @@ async function renderInformes(pc){
 
 async function generarInformeSemana(){
   const weekStart=new Date(); weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7)); weekStart.setHours(0,0,0,0);
-  const{data:fichs}=await _sb.from('staff_checkins').select('empleado_id,minutos').gte('entrada_at',weekStart.toISOString()).not('minutos','is',null).catch(()=>({data:[]}));
-  if(!fichs||!fichs.length){toast('Sin datos de fichaje esta semana');return;}
+  let fichs=[];
+  try{
+    const{data:fd,error}=await _sb.from('staff_checkins').select('empleado_id,minutos').gte('entrada_at',weekStart.toISOString()).not('minutos','is',null);
+    if(!error) fichs=fd||[];
+  }catch(_){}
+  if(!fichs.length){toast('Sin datos de fichaje esta semana');return;}
   const emps=new Set(fichs.map(f=>f.empleado_id)).size;
   const totalMins=fichs.reduce((s,f)=>s+(f.minutos||0),0);
   const{error}=await _sb.from('staff_weekly_reports').upsert({semana_inicio:weekStart.toISOString(),total_empleados:emps,total_minutos:totalMins,generado_at:new Date().toISOString()},{onConflict:'semana_inicio'}).catch(e=>({error:e}));
