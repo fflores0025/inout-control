@@ -80,11 +80,6 @@
     .device-status{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
     .device-status.on{background:var(--success);box-shadow:0 0 6px rgba(0,230,118,.5);}
     .device-status.off{background:var(--muted);}
-    .test-log{background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:12px;font-size:12px;font-family:monospace;max-height:200px;overflow-y:auto;color:var(--txt);}
-    .test-log .ok{color:var(--success);}
-    .test-log .err{color:var(--danger);}
-    .test-log .info{color:var(--a3);}
-    .test-log .warn{color:var(--warn);}
     #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:radial-gradient(ellipse 50% 35% at 50% 0%,rgba(255,60,172,.08) 0%,transparent 60%);}
     .login-card{width:100%;max-width:380px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:36px 32px;}
     @media(max-width:768px){
@@ -155,6 +150,7 @@ const NAV=[
   {key:'dashboard',icon:'⚡',label:'Dashboard'},
   {key:'dispositivos',icon:'📱',label:'Dispositivos'},
   {sec:'Gestión'},
+  {key:'organizaciones',icon:'🏢',label:'Organizaciones'},
   {key:'empleados',icon:'👥',label:'Empleados'},
   {key:'eventos',icon:'🎪',label:'Eventos'},
   {key:'pulseras',icon:'📡',label:'Pulseras RFID'},
@@ -163,7 +159,17 @@ const NAV=[
   {key:'informes',icon:'📊',label:'Informes'},
   {key:'transacciones',icon:'💶',label:'Transacciones'},
 ];
-const TITLES={dashboard:'Dashboard',dispositivos:'Dispositivos',empleados:'Empleados',eventos:'Eventos',pulseras:'Pulseras RFID',fichajes:'Fichajes',informes:'Informes',transacciones:'Transacciones'};
+const TITLES={
+  dashboard:'Dashboard',
+  dispositivos:'Dispositivos',
+  organizaciones:'Organizaciones',
+  empleados:'Empleados',
+  eventos:'Eventos',
+  pulseras:'Pulseras RFID',
+  fichajes:'Fichajes',
+  informes:'Informes',
+  transacciones:'Transacciones'
+};
 
 const DEVICE_TYPES={
   pos:{label:'inout-valid',icon:'📡',url:'https://inout-valid.vercel.app',color:'var(--a3)'},
@@ -180,7 +186,6 @@ function minsToHHMM(m){const h=Math.floor(m/60),mn=m%60;return`${h}h ${String(mn
 function closeModal(){
   document.getElementById('modal-overlay').classList.remove('show');
   document.getElementById('modal-box').innerHTML='';
-  // Desuscribir canales activos
   _activeChannels.forEach(ch => ch.unsubscribe());
   _activeChannels = [];
 }
@@ -251,9 +256,15 @@ function navigate(page){
   document.getElementById('nav-'+page)?.classList.add('active');
   document.getElementById('topbar-title').textContent=TITLES[page]||page;
   const pc=document.getElementById('page-content');
-  ({dashboard:renderDashboard,dispositivos:renderDispositivos,
-    empleados:renderEmpleados,eventos:renderEventos,pulseras:renderPulseras,
-    fichajes:renderFichajes,informes:renderInformes,transacciones:renderTransacciones
+  ({dashboard:renderDashboard,
+    dispositivos:renderDispositivos,
+    organizaciones:renderOrganizaciones,
+    empleados:renderEmpleados,
+    eventos:renderEventos,
+    pulseras:renderPulseras,
+    fichajes:renderFichajes,
+    informes:renderInformes,
+    transacciones:renderTransacciones
   }[page]||renderDashboard)(pc);
 }
 
@@ -303,7 +314,7 @@ async function renderDashboard(pc){
     </div>`;
 }
 
-// ── DISPOSITIVOS CON MDM ──────────────────────────────────────────────────
+// ── DISPOSITIVOS ──────────────────────────────────────────────────────────
 async function renderDispositivos(pc){
   pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando dispositivos…</div>`;
   
@@ -312,23 +323,27 @@ async function renderDispositivos(pc){
     const{data:devs,error}=await _sb.from('control_devices')
       .select('*')
       .order('last_seen',{ascending:false});
-    if(!error) devices=devs||[];
-  }catch(_){}
-
-  // Suscribirse a cambios en tiempo real
-  const channel = _sb.channel('devices_realtime')
-    .on('postgres_changes', {
-      event: '*',
-      schema: 'public',
-      table: 'control_devices'
-    }, () => {
-      if(currentPage === 'dispositivos') {
-        renderDispositivos(document.getElementById('page-content'));
-      }
-    })
-    .subscribe();
-  
-  _activeChannels.push(channel);
+    if(error){
+      console.warn('Error cargando dispositivos:',error);
+      pc.innerHTML=`
+        <div class="card" style="text-align:center;padding:40px">
+          <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+          <div style="color:var(--muted);margin-bottom:16px">No se pudo cargar la tabla control_devices</div>
+          <div style="font-size:12px;color:var(--muted);max-width:500px;margin:0 auto;line-height:1.6">
+            <strong>Posibles causas:</strong><br>
+            • La tabla no existe en Supabase<br>
+            • Falta configurar RLS (Row Level Security)<br>
+            • No tienes permisos para leer la tabla
+          </div>
+        </div>`;
+      return;
+    }
+    devices=devs||[];
+  }catch(e){
+    console.error('Error:', e);
+    pc.innerHTML=`<div class="card" style="text-align:center;padding:40px;color:var(--danger)">Error: ${e.message}</div>`;
+    return;
+  }
 
   const onlineCount = devices.filter(d => {
     const lastSeen = d.last_seen ? new Date(d.last_seen) : null;
@@ -374,7 +389,6 @@ function renderDeviceCard(d) {
     ? lastSeen.toLocaleString('es-ES', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})
     : 'Nunca';
 
-  // Calcular uptime
   const uptimeSeconds = d.uptime_seconds || 0;
   const uptimeHours = Math.floor(uptimeSeconds / 3600);
   const uptimeStr = uptimeHours > 0 
@@ -383,7 +397,6 @@ function renderDeviceCard(d) {
 
   return `
     <div class="device-card ${isOnline ? 'online' : 'offline'}" style="position:relative">
-      <!-- Header -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
         <div style="font-size:28px">${tipo.icon}</div>
         <div style="flex:1;min-width:0">
@@ -395,7 +408,6 @@ function renderDeviceCard(d) {
         <div class="device-status ${isOnline ? 'on' : 'off'}"></div>
       </div>
 
-      <!-- Métricas -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:8px">
         <div>
           <div style="font-size:10px;color:var(--muted);margin-bottom:2px">UPTIME</div>
@@ -405,33 +417,15 @@ function renderDeviceCard(d) {
           <div style="font-size:10px;color:var(--muted);margin-bottom:2px">ÚLTIMA CONN.</div>
           <div style="font-size:11px;font-weight:500">${lastSeenStr.split(',')[1] || lastSeenStr}</div>
         </div>
-        ${d.metrics ? `
-          <div>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">TX HOY</div>
-            <div style="font-size:13px;font-weight:600;color:var(--a3)">${d.metrics.transactions_today || 0}</div>
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">ERRORES</div>
-            <div style="font-size:13px;font-weight:600;color:${d.metrics.errors_today > 0 ? 'var(--danger)' : 'var(--success)'}">${d.metrics.errors_today || 0}</div>
-          </div>
-        ` : ''}
       </div>
 
-      <!-- Botones de acción -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <button class="btn btn-p" style="padding:8px;font-size:12px" onclick="abrirPanelControl('${d.id}','${d.name}')">
-          🎛️ Control
-        </button>
-        <button class="btn btn-g" style="padding:8px;font-size:12px" onclick="window.open('${d.url || tipo.url}','_blank')">
+        <button class="btn btn-p" style="padding:8px;font-size:12px" onclick="window.open('${d.url || tipo.url}','_blank')">
           ↗️ Abrir
         </button>
-      </div>
-
-      <!-- Comandos rápidos -->
-      <div style="display:flex;gap:4px;margin-top:8px">
-        <button class="btn btn-g" style="flex:1;padding:6px;font-size:11px" onclick="enviarComando('${d.id}','restart')" title="Reiniciar">🔄</button>
-        <button class="btn btn-g" style="flex:1;padding:6px;font-size:11px" onclick="enviarComando('${d.id}','clear_cache')" title="Limpiar caché">🗑️</button>
-        <button class="btn btn-danger" style="flex:1;padding:6px;font-size:11px" onclick="eliminarDispositivo('${d.id}')" title="Eliminar">✕</button>
+        <button class="btn btn-danger" style="padding:8px;font-size:12px" onclick="eliminarDispositivo('${d.id}')">
+          ✕ Eliminar
+        </button>
       </div>
     </div>
   `;
@@ -444,201 +438,106 @@ async function eliminarDispositivo(id){
   renderDispositivos(document.getElementById('page-content'));
 }
 
-// ── PANEL DE CONTROL DE DISPOSITIVO ──────────────────────────────────────
-async function abrirPanelControl(deviceId, deviceName) {
-  const {data: device} = await _sb.from('control_devices')
-    .select('*')
-    .eq('id', deviceId)
-    .single();
-
-  if (!device) {
-    toast('Dispositivo no encontrado');
+// ── ORGANIZACIONES ────────────────────────────────────────────────────────
+async function renderOrganizaciones(pc){
+  pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando organizaciones…</div>`;
+  
+  let orgs=[];
+  try{
+    const{data,error}=await _sb.from('organizations').select('*').order('created_at',{ascending:false});
+    if(error){
+      console.warn('Error cargando organizations:', error);
+      pc.innerHTML=`
+        <div class="card" style="text-align:center;padding:40px">
+          <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+          <div style="color:var(--muted);margin-bottom:16px">No se pudo cargar la tabla organizations</div>
+          <div style="font-size:12px;color:var(--muted)">Error: ${error.message}</div>
+        </div>`;
+      return;
+    }
+    orgs=data||[];
+  }catch(e){
+    pc.innerHTML=`<div class="card" style="color:var(--danger)">Error: ${e.message}</div>`;
     return;
   }
 
-  const {data: logs} = await _sb.from('device_logs')
-    .select('*')
-    .eq('device_id', deviceId)
-    .order('created_at', {ascending: false})
-    .limit(50);
-
-  const isOnline = device.last_seen && (Date.now() - new Date(device.last_seen).getTime()) < 300000;
-
-  document.getElementById('modal-box').innerHTML = `
-    <div class="modal-title">🎛️ ${deviceName}</div>
-    
-    <!-- Estado -->
-    <div style="display:flex;gap:10px;margin-bottom:16px">
-      <div style="flex:1;padding:12px;background:var(--bg);border-radius:8px;text-align:center">
-        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">ESTADO</div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:6px">
-          <div class="device-status ${isOnline ? 'on' : 'off'}"></div>
-          <span style="font-size:14px;font-weight:600;color:${isOnline ? 'var(--success)' : 'var(--muted)'}">
-            ${isOnline ? 'ONLINE' : 'OFFLINE'}
-          </span>
-        </div>
-      </div>
-      <div style="flex:1;padding:12px;background:var(--bg);border-radius:8px;text-align:center">
-        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">UPTIME</div>
-        <div style="font-size:14px;font-weight:600">${minsToHHMM(Math.floor((device.uptime_seconds || 0) / 60))}</div>
+  pc.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div style="font-family:Syne;font-size:20px;font-weight:700">${orgs.length} organizaciones</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="renderOrganizaciones(document.getElementById('page-content'))">↺ Refrescar</button>
+        <button class="btn btn-p" onclick="modalNuevaOrg()">+ Nueva organización</button>
       </div>
     </div>
 
-    <!-- Comandos -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Comandos remotos</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <button class="btn btn-g btn-full" onclick="enviarComando('${deviceId}','restart')">🔄 Reiniciar</button>
-        <button class="btn btn-g btn-full" onclick="enviarComando('${deviceId}','clear_cache')">🗑️ Limpiar caché</button>
-        <button class="btn btn-g btn-full" onclick="enviarComando('${deviceId}','reload')">↻ Recargar página</button>
-        <button class="btn btn-g btn-full" onclick="enviarComando('${deviceId}','test_nfc')">📡 Test NFC</button>
+    ${!orgs.length ? `
+      <div class="card" style="text-align:center;padding:40px">
+        <div style="font-size:40px;margin-bottom:12px">🏢</div>
+        <div style="color:var(--muted);margin-bottom:16px">No hay organizaciones registradas.</div>
+        <button class="btn btn-p" onclick="modalNuevaOrg()">+ Crear primera organización</button>
+      </div>`
+    : `
+      <div class="card">
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Organización</th><th>CIF</th><th>Contacto</th><th>Eventos</th><th>Estado</th><th></th></tr></thead>
+          <tbody>
+            ${orgs.map(o=>`<tr>
+              <td>
+                <div style="font-weight:500;font-size:14px">${o.nombre}</div>
+                <div style="font-size:11px;color:var(--muted)">${o.direccion||'—'}</div>
+              </td>
+              <td style="font-family:monospace;font-size:12px;color:var(--a3)">${o.cif||'—'}</td>
+              <td>
+                <div style="font-size:13px">${o.contacto_nombre||'—'}</div>
+                <div style="font-size:11px;color:var(--muted)">${o.contacto_email||'—'}</div>
+              </td>
+              <td style="text-align:center;font-weight:600;color:var(--a1)">${o.num_eventos||0}</td>
+              <td><span class="badge ${o.estado==='activa'?'b-green':'b-gray'}">${o.estado||'activa'}</span></td>
+              <td><button class="btn btn-g" style="padding:6px 10px;font-size:11px" onclick="modalEditOrg('${o.id}')">Editar</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
       </div>
-    </div>
+    `}
+  `;
+}
 
-    <!-- Logs en tiempo real -->
-    <div style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Logs recientes</div>
-        <button class="btn btn-g" style="padding:4px 8px;font-size:11px" onclick="refreshLogs('${deviceId}')">↺</button>
-      </div>
-      <div id="device-logs" class="test-log" style="max-height:200px">
-        ${(logs || []).length === 0 
-          ? '<span class="info">Sin logs recientes</span>'
-          : (logs || []).map(log => {
-              const type = log.level === 'error' ? 'err' : log.level === 'warn' ? 'warn' : 'info';
-              return `<div class="${type}">[${new Date(log.created_at).toLocaleTimeString('es-ES')}] ${log.message}</div>`;
-            }).join('')
-        }
-      </div>
-    </div>
-
-    <!-- Configuración -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Configuración</div>
-      <label class="form-lbl">Ubicación</label>
-      <input class="form-input" id="device-location" value="${device.location || ''}" placeholder="Ej: Entrada principal"/>
-      <label class="form-lbl">Evento asignado</label>
-      <select class="form-select" id="device-event">
-        <option value="">Sin asignar</option>
-        ${_eventos.map(e => `<option value="${e.id}" ${device.event_id === e.id ? 'selected' : ''}>${e.nombre}</option>`).join('')}
-      </select>
-    </div>
-
-    <!-- Botones -->
+async function modalNuevaOrg(){
+  document.getElementById('modal-box').innerHTML=`
+    <div class="modal-title">➕ Nueva organización</div>
+    <label class="form-lbl">Nombre</label>
+    <input class="form-input" id="org-nombre" placeholder="InOut Media SL"/>
+    <label class="form-lbl">CIF/NIF</label>
+    <input class="form-input" id="org-cif" placeholder="B12345678"/>
+    <label class="form-lbl">Dirección</label>
+    <input class="form-input" id="org-dir" placeholder="Calle Principal 123"/>
+    <label class="form-lbl">Contacto - Nombre</label>
+    <input class="form-input" id="org-contacto" placeholder="Juan Pérez"/>
+    <label class="form-lbl">Contacto - Email</label>
+    <input class="form-input" id="org-email" type="email" placeholder="juan@empresa.com"/>
     <div style="display:flex;gap:10px">
-      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cerrar</button>
-      <button class="btn btn-p" style="flex:2" onclick="guardarConfigDispositivo('${deviceId}')">Guardar cambios</button>
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p" style="flex:2" onclick="guardarNuevaOrg()">Crear organización</button>
     </div>
   `;
-
   document.getElementById('modal-overlay').classList.add('show');
-
-  // Suscribirse a logs en tiempo real
-  const channel = _sb.channel(`device_logs_${deviceId}`)
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'device_logs',
-      filter: `device_id=eq.${deviceId}`
-    }, payload => {
-      const logDiv = document.getElementById('device-logs');
-      if (logDiv) {
-        const type = payload.new.level === 'error' ? 'err' : payload.new.level === 'warn' ? 'warn' : 'info';
-        const line = document.createElement('div');
-        line.className = type;
-        line.textContent = `[${new Date(payload.new.created_at).toLocaleTimeString('es-ES')}] ${payload.new.message}`;
-        logDiv.insertBefore(line, logDiv.firstChild);
-        logDiv.scrollTop = 0;
-      }
-    })
-    .subscribe();
-  
-  _activeChannels.push(channel);
 }
 
-async function enviarComando(deviceId, comando) {
-  const btn = event.target;
-  const originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Enviando…';
-
-  try {
-    const {error} = await _sb.from('device_commands').insert({
-      device_id: deviceId,
-      command: comando,
-      status: 'pending',
-      sent_by: userProfile.nombre
-    });
-
-    if (error) throw error;
-
-    toast(`Comando "${comando}" enviado ✓`);
-    
-    // Esperar respuesta (máx 10 segundos)
-    const timeout = setTimeout(() => {
-      toast('⚠️ El dispositivo no respondió', 5000);
-      btn.disabled = false;
-      btn.textContent = originalText;
-    }, 10000);
-
-    // Escuchar respuesta
-    const channel = _sb.channel(`cmd_response_${deviceId}_${Date.now()}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'device_commands',
-        filter: `device_id=eq.${deviceId}`
-      }, payload => {
-        if (payload.new.command === comando && payload.new.status === 'completed') {
-          clearTimeout(timeout);
-          toast(`✅ Comando ejecutado: ${comando}`);
-          btn.disabled = false;
-          btn.textContent = originalText;
-          channel.unsubscribe();
-        }
-      })
-      .subscribe();
-
-  } catch (e) {
-    toast('Error: ' + e.message);
-    btn.disabled = false;
-    btn.textContent = originalText;
-  }
-}
-
-async function guardarConfigDispositivo(deviceId) {
-  const location = document.getElementById('device-location')?.value?.trim() || null;
-  const event_id = document.getElementById('device-event')?.value || null;
-
-  const {error} = await _sb.from('control_devices').update({
-    location,
-    event_id
-  }).eq('id', deviceId);
-
-  if (error) {
-    toast('Error: ' + error.message);
-    return;
-  }
-
-  toast('Configuración guardada ✓');
+async function guardarNuevaOrg(){
+  const nombre=document.getElementById('org-nombre').value.trim();
+  if(!nombre){toast('El nombre es obligatorio');return;}
+  const{error}=await _sb.from('organizations').insert({
+    nombre,
+    cif:document.getElementById('org-cif').value.trim()||null,
+    direccion:document.getElementById('org-dir').value.trim()||null,
+    contacto_nombre:document.getElementById('org-contacto').value.trim()||null,
+    contacto_email:document.getElementById('org-email').value.trim()||null,
+    estado:'activa'
+  });
+  if(error){toast('Error: '+error.message);return;}
+  toast('Organización creada ✓');
   closeModal();
-  renderDispositivos(document.getElementById('page-content'));
-}
-
-async function refreshLogs(deviceId) {
-  const {data: logs} = await _sb.from('device_logs')
-    .select('*')
-    .eq('device_id', deviceId)
-    .order('created_at', {ascending: false})
-    .limit(50);
-
-  const logDiv = document.getElementById('device-logs');
-  if (logDiv) {
-    logDiv.innerHTML = (logs || []).map(log => {
-      const type = log.level === 'error' ? 'err' : log.level === 'warn' ? 'warn' : 'info';
-      return `<div class="${type}">[${new Date(log.created_at).toLocaleTimeString('es-ES')}] ${log.message}</div>`;
-    }).join('');
-  }
+  renderOrganizaciones(document.getElementById('page-content'));
 }
 
 // ── EMPLEADOS ─────────────────────────────────────────────────────────────
