@@ -25,7 +25,7 @@
     .sidebar{width:var(--sidebar);height:100vh;background:var(--surf);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:200;}
     .main-area{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh;}
     .topbar{height:56px;background:var(--surf);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:100;}
-    .main-content{flex:1;padding:24px;max-width:1200px;width:100%;margin:0 auto;}
+    .main-content{flex:1;padding:24px;max-width:1400px;width:100%;margin:0 auto;}
     .s-logo{padding:20px 18px 16px;border-bottom:1px solid var(--border);font-family:'Syne',sans-serif;font-weight:800;font-size:18px;}
     .logo-dot{color:var(--a1);}
     .s-logo small{display:block;font-family:'DM Sans',sans-serif;font-weight:400;font-size:10px;color:var(--a2);text-transform:uppercase;letter-spacing:1.5px;margin-top:3px;}
@@ -70,12 +70,12 @@
     .form-input:focus,.form-select:focus{border-color:var(--a1);}
     .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(6px);z-index:900;align-items:center;justify-content:center;padding:16px;}
     .modal-overlay.show{display:flex;}
-    .modal-box{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:28px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;}
+    .modal-box{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:28px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;}
     .modal-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:20px;}
     #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 20px;font-size:13px;z-index:1000;transition:transform .3s;white-space:nowrap;}
     #toast.show{transform:translateX(-50%) translateY(0);}
     .device-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px;transition:border-color .2s;}
-    .device-card.online{border-color:rgba(0,230,118,.25);}
+    .device-card.online{border-color:rgba(0,230,118,.25);box-shadow:0 0 0 1px rgba(0,230,118,.1);}
     .device-card.offline{opacity:.7;}
     .device-status{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
     .device-status.on{background:var(--success);box-shadow:0 0 6px rgba(0,230,118,.5);}
@@ -85,7 +85,6 @@
     .test-log .err{color:var(--danger);}
     .test-log .info{color:var(--a3);}
     .test-log .warn{color:var(--warn);}
-    /* Login screen */
     #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:radial-gradient(ellipse 50% 35% at 50% 0%,rgba(255,60,172,.08) 0%,transparent 60%);}
     .login-card{width:100%;max-width:380px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:36px 32px;}
     @media(max-width:768px){
@@ -102,7 +101,7 @@
 <div id="toast"></div>
 <div class="modal-overlay" id="modal-overlay"><div class="modal-box" id="modal-box"></div></div>
 
-<!-- LOGIN — solo admin -->
+<!-- LOGIN -->
 <div id="login-screen">
   <div class="login-card">
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:24px;margin-bottom:4px">InOut<span style="color:var(--a2)">.</span> Control</div>
@@ -148,16 +147,13 @@ const SB_KEY='sb_publishable__-K1pC4bOJHRf8JQ__OOzg_jqLxlGla';
 const _sb=supabase.createClient(SB_URL,SB_KEY);
 
 let currentUser=null, userProfile=null, currentPage='dashboard';
-let _empleados=[], _eventos=[], _checkins=[], _orgsCache=[];
+let _empleados=[], _eventos=[], _orgsCache=[];
+let _activeChannels = [];
 
 const NAV=[
   {sec:'Panel'},
   {key:'dashboard',icon:'⚡',label:'Dashboard'},
   {key:'dispositivos',icon:'📱',label:'Dispositivos'},
-  {key:'test',icon:'🧪',label:'Test remoto'},
-  {sec:'Multi-tenant'},
-  {key:'organizaciones',icon:'🏢',label:'Organizaciones'},
-  {key:'clientes',icon:'👤',label:'Clientes admin'},
   {sec:'Gestión'},
   {key:'empleados',icon:'👥',label:'Empleados'},
   {key:'eventos',icon:'🎪',label:'Eventos'},
@@ -167,16 +163,30 @@ const NAV=[
   {key:'informes',icon:'📊',label:'Informes'},
   {key:'transacciones',icon:'💶',label:'Transacciones'},
 ];
-const TITLES={dashboard:'Dashboard',dispositivos:'Dispositivos',test:'Test remoto',organizaciones:'Organizaciones',clientes:'Clientes admin',empleados:'Empleados',eventos:'Eventos',pulseras:'Pulseras RFID',fichajes:'Fichajes',informes:'Informes',transacciones:'Transacciones'};
+const TITLES={dashboard:'Dashboard',dispositivos:'Dispositivos',empleados:'Empleados',eventos:'Eventos',pulseras:'Pulseras RFID',fichajes:'Fichajes',informes:'Informes',transacciones:'Transacciones'};
+
+const DEVICE_TYPES={
+  pos:{label:'inout-valid',icon:'📡',url:'https://inout-valid.vercel.app',color:'var(--a3)'},
+  kiosk:{label:'inout-kiosk',icon:'🎟️',url:'https://inout-kiosk.vercel.app',color:'var(--a1)'},
+  register:{label:'inout-register',icon:'📝',url:'https://inout-register.vercel.app',color:'var(--a2)'},
+  staff:{label:'inout-staff',icon:'👷',url:'https://inout-staff.vercel.app',color:'var(--warn)'},
+  check:{label:'inout-check',icon:'🎫',url:'https://inout-check.vercel.app',color:'var(--muted)'},
+};
 
 function toast(msg,ms=2800){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
 function fmt(n){return(n||0).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtDate(d){return new Date(d).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});}
 function minsToHHMM(m){const h=Math.floor(m/60),mn=m%60;return`${h}h ${String(mn).padStart(2,'0')}m`;}
-function closeModal(){document.getElementById('modal-overlay').classList.remove('show');document.getElementById('modal-box').innerHTML='';}
+function closeModal(){
+  document.getElementById('modal-overlay').classList.remove('show');
+  document.getElementById('modal-box').innerHTML='';
+  // Desuscribir canales activos
+  _activeChannels.forEach(ch => ch.unsubscribe());
+  _activeChannels = [];
+}
 document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();});
 
-// ── AUTH — SOLO ADMIN ──────────────────────────────────────────────────────
+// ── AUTH ──────────────────────────────────────────────────────────────────
 async function doLogin(){
   const email=document.getElementById('login-email').value.trim();
   const pass=document.getElementById('login-pass').value;
@@ -241,8 +251,7 @@ function navigate(page){
   document.getElementById('nav-'+page)?.classList.add('active');
   document.getElementById('topbar-title').textContent=TITLES[page]||page;
   const pc=document.getElementById('page-content');
-  ({dashboard:renderDashboard,dispositivos:renderDispositivos,test:renderTest,
-    organizaciones:renderOrganizaciones,clientes:renderClientes,
+  ({dashboard:renderDashboard,dispositivos:renderDispositivos,
     empleados:renderEmpleados,eventos:renderEventos,pulseras:renderPulseras,
     fichajes:renderFichajes,informes:renderInformes,transacciones:renderTransacciones
   }[page]||renderDashboard)(pc);
@@ -251,23 +260,25 @@ function navigate(page){
 // ── DASHBOARD ─────────────────────────────────────────────────────────────
 async function renderDashboard(pc){
   pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando…</div>`;
-  const[{data:wbs},{data:txs},{data:accesos},{data:checkins}]=await Promise.all([
+  const[{data:wbs},{data:txs},{data:accesos},{data:checkins},{data:devices}]=await Promise.all([
     _sb.from('rfid_wristbands').select('id,status,balance'),
     _sb.from('rfid_transactions').select('type,amount').order('created_at',{ascending:false}).limit(500),
     _sb.from('rfid_access_log').select('direction').gte('created_at',new Date(Date.now()-86400000).toISOString()),
     _sb.from('staff_checkins').select('*').is('salida_at',null),
+    _sb.from('control_devices').select('id,last_seen'),
   ]);
   const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
   const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
   const activasHoy=Math.max(0,(accesos||[]).filter(a=>a.direction==='in').length-(accesos||[]).filter(a=>a.direction==='out').length);
   const trabajando=(checkins||[]).length;
+  const devicesOnline=(devices||[]).filter(d=>d.last_seen&&(Date.now()-new Date(d.last_seen).getTime())<300000).length;
 
   pc.innerHTML=`
     <div class="page-hd" style="margin-bottom:20px"><div style="font-family:Syne;font-size:22px;font-weight:700">Dashboard</div></div>
     <div class="g4 mb24">
       <div class="stat"><div class="stat-lbl">Saldo en circulación</div><div class="stat-val" style="color:var(--a1);font-size:22px">${fmt(totalBal)}€</div></div>
       <div class="stat"><div class="stat-lbl">Total recargado</div><div class="stat-val" style="color:var(--success);font-size:22px">${fmt(totalTop)}€</div></div>
-      <div class="stat"><div class="stat-lbl">Dentro ahora</div><div class="stat-val" style="color:var(--a3)">${activasHoy}</div><div style="font-size:11px;color:var(--muted)">últimas 24h</div></div>
+      <div class="stat"><div class="stat-lbl">Dispositivos online</div><div class="stat-val" style="color:var(--a3)">${devicesOnline}</div><div style="font-size:11px;color:var(--muted)">de ${(devices||[]).length} registrados</div></div>
       <div class="stat"><div class="stat-lbl">Personal trabajando</div><div class="stat-val" style="color:var(--a2)">${trabajando}</div><div style="font-size:11px;color:var(--muted)">fichados ahora</div></div>
     </div>
     <div class="g2">
@@ -292,533 +303,343 @@ async function renderDashboard(pc){
     </div>`;
 }
 
-// ── DISPOSITIVOS ──────────────────────────────────────────────────────────
-const DEVICE_TYPES={
-  valid:{label:'inout-valid',icon:'📡',url:'https://inout-valid.vercel.app',color:'var(--a3)'},
-  kiosk:{label:'inout-kiosk',icon:'🎟️',url:'https://inout-kiosk.vercel.app',color:'var(--a1)'},
-  register:{label:'inout-register',icon:'📝',url:'https://inout-register.vercel.app',color:'var(--a2)'},
-  staff:{label:'inout-staff',icon:'👷',url:'https://inout-staff.vercel.app',color:'var(--warn)'},
-  check:{label:'inout-check',icon:'🎫',url:'https://inout-check.vercel.app',color:'var(--muted)'},
-};
-
+// ── DISPOSITIVOS CON MDM ──────────────────────────────────────────────────
 async function renderDispositivos(pc){
   pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando dispositivos…</div>`;
-  // Cargar dispositivos desde Supabase
+  
   let devices=[];
   try{
-    const{data:devs,error}=await _sb.from('control_devices').select('*').order('last_seen',{ascending:false});
+    const{data:devs,error}=await _sb.from('control_devices')
+      .select('*')
+      .order('last_seen',{ascending:false});
     if(!error) devices=devs||[];
   }catch(_){}
 
+  // Suscribirse a cambios en tiempo real
+  const channel = _sb.channel('devices_realtime')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'control_devices'
+    }, () => {
+      if(currentPage === 'dispositivos') {
+        renderDispositivos(document.getElementById('page-content'));
+      }
+    })
+    .subscribe();
+  
+  _activeChannels.push(channel);
+
+  const onlineCount = devices.filter(d => {
+    const lastSeen = d.last_seen ? new Date(d.last_seen) : null;
+    return lastSeen && (Date.now() - lastSeen.getTime()) < 300000;
+  }).length;
+
   pc.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-      <div style="font-family:Syne;font-size:20px;font-weight:700">${devices.length} dispositivos registrados</div>
-      <button class="btn btn-p" onclick="registrarDispositivo()">+ Registrar dispositivo</button>
+      <div>
+        <div style="font-family:Syne;font-size:20px;font-weight:700">${devices.length} dispositivos registrados</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">
+          <span style="color:var(--success)">●</span> ${onlineCount} online
+          <span style="margin-left:12px;color:var(--muted)">●</span> ${devices.length - onlineCount} offline
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" onclick="renderDispositivos(document.getElementById('page-content'))">↺ Refrescar</button>
+      </div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
-      ${!devices.length?`
-        <div class="card" style="grid-column:1/-1;text-align:center;padding:40px">
-          <div style="font-size:40px;margin-bottom:12px">📱</div>
-          <div style="color:var(--muted);margin-bottom:16px">No hay dispositivos registrados aún.</div>
-          <div style="font-size:12px;color:var(--muted);max-width:400px;margin:0 auto;line-height:1.6">Para registrar un dispositivo, ábrelo desde ese dispositivo, entra con admin y pulsa "Registrar este dispositivo".</div>
-          <button class="btn btn-p" style="margin-top:16px" onclick="registrarDispositivo()">+ Registrar dispositivo</button>
-        </div>`
-      :devices.map(d=>{
-        const tipo=DEVICE_TYPES[d.type]||{label:d.type,icon:'📱',color:'var(--muted)'};
-        const lastSeen=d.last_seen?new Date(d.last_seen):null;
-        const isOnline=lastSeen&&(Date.now()-lastSeen.getTime())<300000; // online si visto en <5min
-        const lastSeenStr=lastSeen?lastSeen.toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'Nunca';
-        return`<div class="device-card ${isOnline?'online':'offline'}">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-            <div style="font-size:28px">${tipo.icon}</div>
-            <div style="flex:1">
-              <div style="font-family:Syne;font-size:14px;font-weight:600">${d.name||tipo.label}</div>
-              <div style="font-size:11px;color:var(--muted)">${d.location||'Sin ubicación'}</div>
-            </div>
-            <div class="device-status ${isOnline?'on':'off'}"></div>
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Último acceso: ${lastSeenStr}</div>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-g" style="flex:1;font-size:12px;padding:7px" onclick="navigate('test');selectDeviceForTest('${d.id}')">🧪 Test</button>
-            <button class="btn btn-g" style="flex:1;font-size:12px;padding:7px" onclick="abrirDispositivo('${d.url||tipo.url}')">↗️ Abrir</button>
-            <button class="btn btn-danger" style="font-size:12px;padding:7px 10px" onclick="eliminarDispositivo('${d.id}')">✕</button>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`;
+
+    ${!devices.length ? `
+      <div class="card" style="grid-column:1/-1;text-align:center;padding:40px">
+        <div style="font-size:40px;margin-bottom:12px">📱</div>
+        <div style="color:var(--muted);margin-bottom:16px">No hay dispositivos registrados aún.</div>
+        <div style="font-size:12px;color:var(--muted);max-width:400px;margin:0 auto;line-height:1.6;margin-bottom:20px">
+          Los dispositivos se registran automáticamente cuando abres <strong>inout-valid</strong> desde un POS/tablet con admin.
+        </div>
+        <button class="btn btn-p" onclick="window.open('https://inout-valid.vercel.app','_blank')">↗️ Abrir inout-valid</button>
+      </div>`
+    : `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
+        ${devices.map(d => renderDeviceCard(d)).join('')}
+      </div>
+    `}
+  `;
 }
 
-function abrirDispositivo(url){ window.open(url,'_blank'); }
+function renderDeviceCard(d) {
+  const tipo = DEVICE_TYPES[d.type] || {label: d.type, icon: '📱', color: 'var(--muted)'};
+  const lastSeen = d.last_seen ? new Date(d.last_seen) : null;
+  const isOnline = lastSeen && (Date.now() - lastSeen.getTime()) < 300000;
+  const lastSeenStr = lastSeen 
+    ? lastSeen.toLocaleString('es-ES', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})
+    : 'Nunca';
 
-function registrarDispositivo(){
-  const tipos=Object.entries(DEVICE_TYPES);
-  document.getElementById('modal-box').innerHTML=`
-    <div class="modal-title">📱 Registrar dispositivo</div>
-    <label class="form-lbl">Nombre del dispositivo</label>
-    <input class="form-input" id="dev-name" placeholder="Ej: Kiosco entrada principal"/>
-    <label class="form-lbl">Tipo</label>
-    <select class="form-select" id="dev-type">
-      ${tipos.map(([k,v])=>`<option value="${k}">${v.icon} ${v.label}</option>`).join('')}
-    </select>
-    <label class="form-lbl">Ubicación</label>
-    <input class="form-input" id="dev-location" placeholder="Ej: Entrada principal · Sala 1"/>
-    <label class="form-lbl">URL (opcional)</label>
-    <input class="form-input" id="dev-url" placeholder="https://..." style="font-family:monospace"/>
-    <div style="display:flex;gap:10px">
-      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-p" style="flex:2" onclick="guardarDispositivo()">Registrar</button>
-    </div>`;
-  document.getElementById('modal-overlay').classList.add('show');
-  setTimeout(()=>document.getElementById('dev-name')?.focus(),80);
-}
+  // Calcular uptime
+  const uptimeSeconds = d.uptime_seconds || 0;
+  const uptimeHours = Math.floor(uptimeSeconds / 3600);
+  const uptimeStr = uptimeHours > 0 
+    ? `${uptimeHours}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`
+    : `${Math.floor(uptimeSeconds / 60)}m`;
 
-async function guardarDispositivo(){
-  const name=document.getElementById('dev-name')?.value?.trim();
-  const type=document.getElementById('dev-type')?.value;
-  const location=document.getElementById('dev-location')?.value?.trim()||null;
-  const url=document.getElementById('dev-url')?.value?.trim()||null;
-  if(!name){toast('Introduce un nombre');return;}
-  const{error}=await _sb.from('control_devices').insert({name,type,location,url,registered_by:userProfile.nombre,last_seen:new Date().toISOString()});
-  if(error){
-    if(error.code==='42P01'){
-      toast('⚠️ Tabla control_devices no existe. Ejecuta el SQL migration.');
-    } else { toast('Error: '+error.message); }
-    return;
-  }
-  closeModal();toast(`"${name}" registrado ✓`);renderDispositivos(document.getElementById('page-content'));
+  return `
+    <div class="device-card ${isOnline ? 'online' : 'offline'}" style="position:relative">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="font-size:28px">${tipo.icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:Syne;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${d.name || tipo.label}
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${d.location || 'Sin ubicación'}</div>
+        </div>
+        <div class="device-status ${isOnline ? 'on' : 'off'}"></div>
+      </div>
+
+      <!-- Métricas -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:8px">
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">UPTIME</div>
+          <div style="font-size:13px;font-weight:600;color:var(--a1)">${uptimeStr}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">ÚLTIMA CONN.</div>
+          <div style="font-size:11px;font-weight:500">${lastSeenStr.split(',')[1] || lastSeenStr}</div>
+        </div>
+        ${d.metrics ? `
+          <div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">TX HOY</div>
+            <div style="font-size:13px;font-weight:600;color:var(--a3)">${d.metrics.transactions_today || 0}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">ERRORES</div>
+            <div style="font-size:13px;font-weight:600;color:${d.metrics.errors_today > 0 ? 'var(--danger)' : 'var(--success)'}">${d.metrics.errors_today || 0}</div>
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Botones de acción -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button class="btn btn-p" style="padding:8px;font-size:12px" onclick="abrirPanelControl('${d.id}','${d.name}')">
+          🎛️ Control
+        </button>
+        <button class="btn btn-g" style="padding:8px;font-size:12px" onclick="window.open('${d.url || tipo.url}','_blank')">
+          ↗️ Abrir
+        </button>
+      </div>
+
+      <!-- Comandos rápidos -->
+      <div style="display:flex;gap:4px;margin-top:8px">
+        <button class="btn btn-g" style="flex:1;padding:6px;font-size:11px" onclick="enviarComando('${d.id}','restart')" title="Reiniciar">🔄</button>
+        <button class="btn btn-g" style="flex:1;padding:6px;font-size:11px" onclick="enviarComando('${d.id}','clear_cache')" title="Limpiar caché">🗑️</button>
+        <button class="btn btn-danger" style="flex:1;padding:6px;font-size:11px" onclick="eliminarDispositivo('${d.id}')" title="Eliminar">✕</button>
+      </div>
+    </div>
+  `;
 }
 
 async function eliminarDispositivo(id){
+  if(!confirm('¿Eliminar este dispositivo?')) return;
   await _sb.from('control_devices').delete().eq('id',id);
-  toast('Dispositivo eliminado');renderDispositivos(document.getElementById('page-content'));
+  toast('Dispositivo eliminado');
+  renderDispositivos(document.getElementById('page-content'));
 }
 
-// ── TEST REMOTO ───────────────────────────────────────────────────────────
-let _testDevice=null, _testLogs=[];
+// ── PANEL DE CONTROL DE DISPOSITIVO ──────────────────────────────────────
+async function abrirPanelControl(deviceId, deviceName) {
+  const {data: device} = await _sb.from('control_devices')
+    .select('*')
+    .eq('id', deviceId)
+    .single();
 
-function selectDeviceForTest(id){
-  // Llamado desde Dispositivos cuando se pulsa el botón Test
-  setTimeout(()=>{
-    const sel=document.getElementById('test-device-sel');
-    if(sel) sel.value=id;
-  },200);
-}
-
-async function renderTest(pc){
-  let devices=[];
-  try{
-    const{data,error}=await _sb.from('control_devices').select('*').order('name');
-    if(!error) devices=data||[];
-  }catch(_){}
-
-  pc.innerHTML=`
-    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">🧪 Test remoto de dispositivos</div>
-    <div class="g2">
-      <div>
-        <div class="card mb16">
-          <div class="card-title">Seleccionar dispositivo</div>
-          <select class="form-select" id="test-device-sel" onchange="onSelectTestDevice(this.value)">
-            <option value="">— Selecciona un dispositivo —</option>
-            ${devices.map(d=>`<option value="${d.id}">${d.name} (${d.type})</option>`).join('')}
-          </select>
-          <div id="test-device-info" style="font-size:12px;color:var(--muted)">Selecciona un dispositivo para ver su estado</div>
-        </div>
-        <div class="card">
-          <div class="card-title">Tests disponibles</div>
-          <div id="test-buttons" style="display:flex;flex-direction:column;gap:8px">
-            <div style="color:var(--muted);font-size:13px">Selecciona un dispositivo primero</div>
-          </div>
-        </div>
-      </div>
-      <div>
-        <div class="card">
-          <div class="card-title">Log de test</div>
-          <div class="test-log" id="test-log"><span class="info">Esperando…</span></div>
-          <button class="btn btn-g btn-full" style="margin-top:10px;font-size:12px" onclick="clearTestLog()">Limpiar log</button>
-        </div>
-      </div>
-    </div>`;
-}
-
-function onSelectTestDevice(id){
-  if(!id){document.getElementById('test-device-info').textContent='Selecciona un dispositivo';document.getElementById('test-buttons').innerHTML='<div style="color:var(--muted);font-size:13px">Selecciona un dispositivo primero</div>';return;}
-  _testDevice=id;
-  document.getElementById('test-device-info').textContent='Dispositivo seleccionado — ejecuta los tests';
-  document.getElementById('test-buttons').innerHTML=`
-    <button class="btn btn-p" onclick="runTest('ping')">🏓 Ping — conexión Supabase</button>
-    <button class="btn btn-g" onclick="runTest('wristband')">📡 Crear pulsera de test (se elimina en 5 min)</button>
-    <button class="btn btn-g" onclick="runTest('transaction')">💳 Test transacción (0,01€)</button>
-    <button class="btn btn-g" onclick="runTest('access')">🚪 Test control de acceso</button>
-    <button class="btn btn-danger" onclick="runTest('cleanup')">🗑️ Limpiar datos de test</button>`;
-}
-
-function logTest(msg,type='info'){
-  const log=document.getElementById('test-log');if(!log)return;
-  const line=document.createElement('div');
-  line.className=type;line.textContent=`[${new Date().toLocaleTimeString('es-ES')}] ${msg}`;
-  log.appendChild(line);log.scrollTop=log.scrollHeight;
-  _testLogs.push({msg,type,ts:Date.now()});
-}
-function clearTestLog(){const l=document.getElementById('test-log');if(l)l.innerHTML='<span class="info">Log limpiado</span>';_testLogs=[];}
-
-const TEST_UID='TEST-CTRL-'+Math.random().toString(36).slice(2,8).toUpperCase();
-
-async function runTest(type){
-  if(!_testDevice&&type!=='ping'){logTest('Selecciona un dispositivo primero','warn');return;}
-  logTest(`Iniciando test: ${type}…`,'info');
-
-  try{
-    if(type==='ping'){
-      const t0=Date.now();
-      const{data,error}=await _sb.from('rfid_wristbands').select('id').limit(1);
-      if(error) throw error;
-      logTest(`✓ Supabase responde en ${Date.now()-t0}ms`,'ok');
-    }
-    else if(type==='wristband'){
-      logTest(`Creando pulsera temporal UID: ${TEST_UID}`,'info');
-      const{error}=await _sb.from('rfid_wristbands').insert({uid:TEST_UID,holder_name:'[TEST] Control Admin',status:'active',balance:10,total_loaded:10,total_spent:0,registered_by:'inout-control-test'});
-      if(error) throw error;
-      logTest(`✓ Pulsera test creada (UID: ${TEST_UID})`,'ok');
-      logTest('⏳ Se eliminará en 5 minutos…','warn');
-      setTimeout(()=>runTest('cleanup'),300000);
-    }
-    else if(type==='transaction'){
-      const{data:wb}=await _sb.from('rfid_wristbands').select('id,balance').eq('uid',TEST_UID).maybeSingle();
-      if(!wb){logTest('Crea primero la pulsera de test','warn');return;}
-      const newBal=parseFloat(wb.balance)-0.01;
-      await _sb.from('rfid_wristbands').update({balance:newBal}).eq('id',wb.id);
-      await _sb.from('rfid_transactions').insert({wristband_id:wb.id,type:'purchase',amount:-0.01,balance_after:newBal,description:'[TEST] Control Admin',operator:'inout-control-test'});
-      logTest(`✓ Transacción test OK — Nuevo saldo: ${fmt(newBal)}€`,'ok');
-    }
-    else if(type==='access'){
-      const{data:wb}=await _sb.from('rfid_wristbands').select('id').eq('uid',TEST_UID).maybeSingle();
-      if(!wb){logTest('Crea primero la pulsera de test','warn');return;}
-      await _sb.from('rfid_access_log').insert({wristband_id:wb.id,direction:'in',gate:'[TEST]',operator:'inout-control-test'});
-      logTest(`✓ Acceso test registrado (ENTRADA)`,'ok');
-    }
-    else if(type==='cleanup'){
-      logTest('Eliminando datos de test…','info');
-      const{data:wb}=await _sb.from('rfid_wristbands').select('id').eq('uid',TEST_UID).maybeSingle();
-      if(wb){
-        await _sb.from('rfid_access_log').delete().eq('wristband_id',wb.id).eq('operator','inout-control-test');
-        await _sb.from('rfid_transactions').delete().eq('wristband_id',wb.id).eq('operator','inout-control-test');
-        await _sb.from('rfid_wristbands').delete().eq('id',wb.id);
-        logTest('✓ Pulsera y datos de test eliminados','ok');
-      } else { logTest('No hay datos de test que limpiar','info'); }
-    }
-  }catch(e){ logTest('✗ Error: '+e.message,'err'); }
-}
-
-// ── ORGANIZACIONES (multi-tenant) ───────────────────────────────────────
-async function renderOrganizaciones(pc){
-  pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando organizaciones…</div>';
-  
-  let orgs = null;
-  let fetchError = null;
-  
-  try{
-    const{data, error} = await _sb.from('organizations')
-      .select('*')
-      .order('created_at',{ascending:false});
-    if(error) throw error;
-    orgs = data || [];
-  }catch(e){
-    fetchError = e.message;
-  }
-
-  if(fetchError){
-    pc.innerHTML=`<div class="card" style="text-align:center;padding:40px">
-      <div style="font-size:40px;margin-bottom:12px">⚠️</div>
-      <div style="font-family:Syne;font-size:16px;font-weight:700;margin-bottom:8px">Error al cargar organizaciones</div>
-      <div style="font-size:13px;color:var(--danger);margin-bottom:16px;font-family:monospace">${fetchError}</div>
-      <div style="font-size:13px;color:var(--muted);max-width:440px;margin:0 auto;line-height:1.6;margin-bottom:20px">
-        Posibles causas:<br>
-        · La tabla <code>organizations</code> no existe → ejecuta el <strong>Bloque A</strong> del migration SQL<br>
-        · Política RLS bloquea la lectura → ejecuta el <strong>Bloque A</strong> que añade <code>allow_all_orgs</code>
-      </div>
-      <button class="btn btn-p" onclick="renderOrganizaciones(document.getElementById('page-content'))">🔄 Reintentar</button>
-    </div>`;
+  if (!device) {
+    toast('Dispositivo no encontrado');
     return;
   }
 
-  const planBadge=(p)=>{
-    const m={enterprise:'b-pink',pro:'b-blue',basic:'b-gray'};
-    return `<span class="badge ${m[p]||'b-gray'}" style="font-size:10px">${p}</span>`;
-  };
+  const {data: logs} = await _sb.from('device_logs')
+    .select('*')
+    .eq('device_id', deviceId)
+    .order('created_at', {ascending: false})
+    .limit(50);
 
-  pc.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-      <div>
-        <div style="font-family:Syne;font-size:20px;font-weight:700">${orgs.length} organizaciones</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px">Cada organización es un cliente independiente</div>
+  const isOnline = device.last_seen && (Date.now() - new Date(device.last_seen).getTime()) < 300000;
+
+  document.getElementById('modal-box').innerHTML = `
+    <div class="modal-title">🎛️ ${deviceName}</div>
+    
+    <!-- Estado -->
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <div style="flex:1;padding:12px;background:var(--bg);border-radius:8px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">ESTADO</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px">
+          <div class="device-status ${isOnline ? 'on' : 'off'}"></div>
+          <span style="font-size:14px;font-weight:600;color:${isOnline ? 'var(--success)' : 'var(--muted)'}">
+            ${isOnline ? 'ONLINE' : 'OFFLINE'}
+          </span>
+        </div>
       </div>
-      <button class="btn btn-p" onclick="modalNuevaOrg()">+ Nueva organización</button>
+      <div style="flex:1;padding:12px;background:var(--bg);border-radius:8px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">UPTIME</div>
+        <div style="font-size:14px;font-weight:600">${minsToHHMM(Math.floor((device.uptime_seconds || 0) / 60))}</div>
+      </div>
     </div>
 
-    ${!orgs.length?`
-      <div class="card" style="text-align:center;padding:40px">
-        <div style="font-size:40px;margin-bottom:12px">🏢</div>
-        <div style="color:var(--muted);margin-bottom:16px">Sin organizaciones. InOut Media es la principal.</div>
-        <button class="btn btn-p" onclick="modalNuevaOrg()">+ Crear primera organización cliente</button>
-      </div>`
-    :`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px">
-      ${orgs.map(o=>`
-        <div class="card" style="transition:border-color .2s;${o.activo?'':'opacity:.6'}">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-            <div style="width:42px;height:42px;border-radius:10px;background:${o.color_primario||'var(--a1)'};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🏢</div>
-            <div style="flex:1;min-width:0">
-              <div style="font-family:Syne;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.nombre}</div>
-              <div style="font-size:11px;color:var(--muted);font-family:monospace">/${o.slug}</div>
-            </div>
-            ${planBadge(o.plan)}
-          </div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${o.email||'Sin email'}</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <span class="badge ${o.activo?'b-green':'b-gray'}">${o.activo?'Activa':'Inactiva'}</span>
-            <div style="flex:1"></div>
-            <button class="btn btn-g" style="padding:5px 10px;font-size:11px" onclick="verOrgStats('${o.id}','${o.nombre.replace(/'/g,"\\'")}')">📊</button>
-            <button class="btn btn-g" style="padding:5px 10px;font-size:11px" onclick="editarOrg('${o.id}','${o.slug}','${o.nombre.replace(/'/g,"\\'")}','${o.email||''}','${o.plan}')">✏️</button>
-            <button class="btn btn-g" style="padding:5px 10px;font-size:11px" onclick="abrirTaquillaOrg('${o.slug}')">↗️</button>
-          </div>
-        </div>`).join('')}
-    </div>`}`;
-}
-
-function modalNuevaOrg(){
-  document.getElementById('modal-box').innerHTML=`
-    <div class="modal-title">🏢 Nueva organización</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.5">
-      Crea una organización para un nuevo cliente. Tendrá su propia taquilla, eventos y equipo completamente aislados.
-    </div>
-    <div id="org-err" style="display:none;background:rgba(255,23,68,.1);border:1px solid rgba(255,23,68,.2);color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px"></div>
-    <label class="form-lbl">Nombre de la organización</label>
-    <input class="form-input" id="org-nombre" placeholder="Ej: Malalsa Fiesta · Festival XYZ"/>
-    <label class="form-lbl">Slug (ID en URL)</label>
-    <input class="form-input" id="org-slug" placeholder="malalsa · festival-xyz" style="font-family:monospace"
-      oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'-').replace(/--+/g,'-')"/>
-    <div style="font-size:11px;color:var(--muted);margin:-8px 0 14px">La taquilla será: inout-check.vercel.app?org=<strong id="slug-preview">slug</strong></div>
-    <label class="form-lbl">Email de contacto</label>
-    <input class="form-input" id="org-email" type="email" placeholder="contacto@empresa.com"/>
-    <label class="form-lbl">Plan</label>
-    <select class="form-select" id="org-plan">
-      <option value="basic">Basic — Taquilla + RFID básico</option>
-      <option value="pro">Pro — Todo incluido</option>
-      <option value="enterprise">Enterprise — Multi-sede + soporte</option>
-    </select>
-    <div style="display:flex;gap:10px">
-      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-p" style="flex:2" onclick="crearOrganizacion()">Crear organización</button>
-    </div>`;
-  document.getElementById('modal-overlay').classList.add('show');
-  const slugInput=document.getElementById('org-slug');
-  const nombreInput=document.getElementById('org-nombre');
-  nombreInput?.addEventListener('input',()=>{
-    const auto=nombreInput.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-    slugInput.value=auto;
-    const p=document.getElementById('slug-preview'); if(p) p.textContent=auto||'slug';
-  });
-  slugInput?.addEventListener('input',()=>{const p=document.getElementById('slug-preview');if(p)p.textContent=slugInput.value||'slug';});
-  setTimeout(()=>nombreInput?.focus(),80);
-}
-
-async function crearOrganizacion(){
-  const nombre=document.getElementById('org-nombre')?.value?.trim();
-  const slug=document.getElementById('org-slug')?.value?.trim();
-  const email=document.getElementById('org-email')?.value?.trim()||null;
-  const plan=document.getElementById('org-plan')?.value||'basic';
-  const err=document.getElementById('org-err');
-  if(!nombre){err.textContent='El nombre es obligatorio';err.style.display='block';return;}
-  if(!slug||slug.length<2){err.textContent='El slug es obligatorio (mínimo 2 chars)';err.style.display='block';return;}
-  const btn=document.querySelector('#modal-box .btn-p');
-  if(btn){btn.disabled=true;btn.textContent='Creando…';}
-  const{data,error}=await _sb.from('organizations').insert({slug,nombre,email,plan,activo:true}).select().single();
-  if(error){
-    err.textContent='Error: '+error.message+(error.code==='23505'?' (slug ya existe)':'');
-    err.style.display='block';
-    if(btn){btn.disabled=false;btn.textContent='Crear organización';}
-    return;
-  }
-  closeModal();
-  toast(`"${nombre}" creada ✓ — URL: ?org=${slug}`);
-  renderOrganizaciones(document.getElementById('page-content'));
-}
-
-async function editarOrg(id,slug,nombre,email,plan){
-  document.getElementById('modal-box').innerHTML=`
-    <div class="modal-title">✏️ Editar: ${nombre}</div>
-    <label class="form-lbl">Nombre</label><input class="form-input" id="eo-nombre" value="${nombre}"/>
-    <label class="form-lbl">Email</label><input class="form-input" id="eo-email" value="${email||''}"/>
-    <label class="form-lbl">Plan</label>
-    <select class="form-select" id="eo-plan">
-      ${['basic','pro','enterprise'].map(p=>`<option value="${p}" ${p===plan?'selected':''}>${p}</option>`).join('')}
-    </select>
-    <label class="form-lbl">Estado</label>
-    <select class="form-select" id="eo-activo">
-      <option value="true">Activa</option><option value="false">Inactiva</option>
-    </select>
-    <div style="display:flex;gap:10px">
-      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-p" style="flex:2" onclick="guardarOrg('${id}')">Guardar</button>
-    </div>`;
-  document.getElementById('modal-overlay').classList.add('show');
-}
-
-async function guardarOrg(id){
-  const nombre=document.getElementById('eo-nombre')?.value?.trim();
-  const email=document.getElementById('eo-email')?.value?.trim()||null;
-  const plan=document.getElementById('eo-plan')?.value;
-  const activo=document.getElementById('eo-activo')?.value==='true';
-  const{error}=await _sb.from('organizations').update({nombre,email,plan,activo}).eq('id',id);
-  if(error){toast('Error: '+error.message);return;}
-  closeModal();toast('Organización actualizada ✓');
-  renderOrganizaciones(document.getElementById('page-content'));
-}
-
-async function verOrgStats(orgId, orgNombre){
-  document.getElementById('modal-box').innerHTML=`<div class="modal-title">📊 ${orgNombre}</div><div style="color:var(--muted)">Cargando…</div>`;
-  document.getElementById('modal-overlay').classList.add('show');
-  const[{data:evs},{data:wbs},{data:txs},{data:emps}]=await Promise.all([
-    _sb.from('events').select('id,nombre,estado').eq('org_id',orgId),
-    _sb.from('rfid_wristbands').select('id,balance').eq('org_id',orgId),
-    _sb.from('rfid_transactions').select('type,amount').eq('org_id',orgId),
-    _sb.from('empleados').select('id,nombre,role').eq('org_id',orgId),
-  ]);
-  const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
-  const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  document.getElementById('modal-box').innerHTML=`
-    <div class="modal-title">📊 ${orgNombre}</div>
-    <div class="g2 mb16">
-      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Eventos</div><div style="font-family:Syne;font-size:28px;font-weight:700;color:var(--a3)">${(evs||[]).length}</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Pulseras</div><div style="font-family:Syne;font-size:28px;font-weight:700;color:var(--a1)">${(wbs||[]).length}</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Saldo</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--a1)">${fmt(totalBal)}€</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Empleados</div><div style="font-family:Syne;font-size:28px;font-weight:700;color:var(--a2)">${(emps||[]).length}</div></div>
-    </div>
+    <!-- Comandos -->
     <div style="margin-bottom:16px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Eventos activos</div>
-      ${(evs||[]).filter(e=>['publicado','confirmado'].includes(e.estado)).map(e=>`
-        <div style="padding:8px 12px;background:var(--bg);border-radius:8px;font-size:13px;margin-bottom:4px">${e.nombre} <span class="badge b-green" style="font-size:10px">${e.estado}</span></div>`).join('')||'<div style="color:var(--muted);font-size:13px">Sin eventos activos</div>'}
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Comandos remotos</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn btn-g btn-full" onclick="enviarComando('${deviceId}','restart')">🔄 Reiniciar</button>
+        <button class="btn btn-g btn-full" onclick="enviarComando('${deviceId}','clear_cache')">🗑️ Limpiar caché</button>
+        <button class="btn btn-g btn-full" onclick="enviarComando('${deviceId}','reload')">↻ Recargar página</button>
+        <button class="btn btn-g btn-full" onclick="enviarComando('${deviceId}','test_nfc')">📡 Test NFC</button>
+      </div>
     </div>
-    <button class="btn btn-g btn-full" onclick="closeModal()">Cerrar</button>`;
-}
 
-function abrirTaquillaOrg(slug){
-  window.open(`https://inout-check.vercel.app?org=${slug}`,'_blank');
-}
-
-// ── CLIENTES ADMIN ────────────────────────────────────────────────────────
-async function renderClientes(pc){
-  pc.innerHTML='<div style="color:var(--muted)">Cargando…</div>';
-  let orgs=[], admins=[];
-  try{
-    const{data:d1,error:e1}=await _sb.from('organizations').select('id,slug,nombre').order('nombre');
-    if(!e1){ orgs=d1||[]; _orgsCache=orgs; }
-    const{data:d2,error:e2}=await _sb.from('empleados').select('*').in('role',['admin','rrhh']).not('org_id','is',null);
-    if(!e2) admins=d2||[];
-  }catch(_){}
-
-  pc.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-      <div style="font-family:Syne;font-size:20px;font-weight:700">Clientes admin</div>
-      <button class="btn btn-p" onclick="modalNuevoClienteAdmin(${JSON.stringify(orgs||[]).replace(/'/g,"&#39;")})">+ Dar acceso a cliente</button>
+    <!-- Logs en tiempo real -->
+    <div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Logs recientes</div>
+        <button class="btn btn-g" style="padding:4px 8px;font-size:11px" onclick="refreshLogs('${deviceId}')">↺</button>
+      </div>
+      <div id="device-logs" class="test-log" style="max-height:200px">
+        ${(logs || []).length === 0 
+          ? '<span class="info">Sin logs recientes</span>'
+          : (logs || []).map(log => {
+              const type = log.level === 'error' ? 'err' : log.level === 'warn' ? 'warn' : 'info';
+              return `<div class="${type}">[${new Date(log.created_at).toLocaleTimeString('es-ES')}] ${log.message}</div>`;
+            }).join('')
+        }
+      </div>
     </div>
-    ${!(admins||[]).length?`
-      <div class="card" style="text-align:center;padding:40px">
-        <div style="font-size:40px;margin-bottom:12px">👤</div>
-        <div style="color:var(--muted);margin-bottom:16px">Sin clientes admin aún. Crea una organización primero, luego dale acceso a su responsable.</div>
-      </div>`
-    :`<div class="card">
-      <div class="tbl-wrap"><table>
-        <thead><tr><th>Nombre</th><th>Email</th><th>Organización</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
-        <tbody>${(admins||[]).map(a=>{
-          const org=(orgs||[]).find(o=>o.id===a.org_id);
-          return`<tr>
-            <td style="font-weight:500">${a.nombre}</td>
-            <td style="font-size:12px;color:var(--muted)">${a.email}</td>
-            <td><span class="badge b-blue" style="font-size:10px">${org?.nombre||'—'}</span></td>
-            <td><span class="badge b-gray" style="font-size:10px">${a.role}</span></td>
-            <td><span class="badge ${a.estado==='activo'?'b-green':'b-gray'}">${a.estado||'activo'}</span></td>
-            <td>
-              <button class="btn btn-danger" style="padding:4px 8px;font-size:11px" onclick="revocarAcceso('${a.id}','${a.nombre.replace(/'/g,"\\''")}')">Revocar</button>
-            </td>
-          </tr>`;
-        }).join('')}
-        </tbody>
-      </table></div>
-    </div>`}
-    <div style="margin-top:12px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:9px;font-size:12px;color:var(--muted);line-height:1.6">
-      💡 Un <strong style="color:var(--txt)">cliente admin</strong> puede gestionar sus propios eventos, productos, pulseras y equipo desde 
-      <a href="https://inout-connect.vercel.app" target="_blank" style="color:var(--a3)">inout-connect</a> —
-      pero <strong style="color:var(--txt)">solo verá los datos de su organización</strong>, nunca los de otros clientes.
-    </div>`;
-}
 
-async function modalNuevoClienteAdmin(){
-  // Si no tenemos orgs en cache, cargarlas ahora
-  if(!_orgsCache.length){
-    try{
-      const{data,error}=await _sb.from('organizations').select('id,slug,nombre').order('nombre');
-      if(!error) _orgsCache=data||[];
-    }catch(_){}
-  }
-  const orgs=_orgsCache;
-  if(!orgs.length){toast('Crea una organización primero');navigate('organizaciones');return;}
-  document.getElementById('modal-box').innerHTML=`
-    <div class="modal-title">👤 Dar acceso a cliente admin</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.5">
-      El cliente admin podrá gestionar su organización desde inout-connect, pero no verá datos de otros clientes.
+    <!-- Configuración -->
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Configuración</div>
+      <label class="form-lbl">Ubicación</label>
+      <input class="form-input" id="device-location" value="${device.location || ''}" placeholder="Ej: Entrada principal"/>
+      <label class="form-lbl">Evento asignado</label>
+      <select class="form-select" id="device-event">
+        <option value="">Sin asignar</option>
+        ${_eventos.map(e => `<option value="${e.id}" ${device.event_id === e.id ? 'selected' : ''}>${e.nombre}</option>`).join('')}
+      </select>
     </div>
-    <div id="ca-err" style="display:none;background:rgba(255,23,68,.1);border:1px solid rgba(255,23,68,.2);color:var(--danger);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px"></div>
-    <label class="form-lbl">Organización</label>
-    <select class="form-select" id="ca-org">
-      ${orgs.map(o=>`<option value="${o.id}">${o.nombre} (/${o.slug})</option>`).join('')}
-    </select>
-    <label class="form-lbl">Nombre</label><input class="form-input" id="ca-nombre" placeholder="Nombre Apellidos"/>
-    <label class="form-lbl">Email</label><input class="form-input" id="ca-email" type="email" placeholder="cliente@empresa.com"/>
+
+    <!-- Botones -->
     <div style="display:flex;gap:10px">
-      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-p" style="flex:2" onclick="crearClienteAdmin()">Crear acceso</button>
-    </div>`;
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cerrar</button>
+      <button class="btn btn-p" style="flex:2" onclick="guardarConfigDispositivo('${deviceId}')">Guardar cambios</button>
+    </div>
+  `;
+
   document.getElementById('modal-overlay').classList.add('show');
-  setTimeout(()=>document.getElementById('ca-nombre')?.focus(),80);
+
+  // Suscribirse a logs en tiempo real
+  const channel = _sb.channel(`device_logs_${deviceId}`)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'device_logs',
+      filter: `device_id=eq.${deviceId}`
+    }, payload => {
+      const logDiv = document.getElementById('device-logs');
+      if (logDiv) {
+        const type = payload.new.level === 'error' ? 'err' : payload.new.level === 'warn' ? 'warn' : 'info';
+        const line = document.createElement('div');
+        line.className = type;
+        line.textContent = `[${new Date(payload.new.created_at).toLocaleTimeString('es-ES')}] ${payload.new.message}`;
+        logDiv.insertBefore(line, logDiv.firstChild);
+        logDiv.scrollTop = 0;
+      }
+    })
+    .subscribe();
+  
+  _activeChannels.push(channel);
 }
 
-async function crearClienteAdmin(){
-  const orgId=document.getElementById('ca-org')?.value;
-  const nombre=document.getElementById('ca-nombre')?.value?.trim();
-  const email=document.getElementById('ca-email')?.value?.trim();
-  const err=document.getElementById('ca-err');
-  if(!nombre||!email){err.textContent='Nombre y email obligatorios';err.style.display='block';return;}
-  const btn=document.querySelector('#modal-box .btn-p');
-  if(btn){btn.disabled=true;btn.textContent='Creando…';}
-  try{
-    const res=await fetch('/api/create-employee',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email,nombre,role:'admin',tipo:'fijo',org_id:orgId,departamento:'Dirección',irpf:0,salario_base:0})});
-    const data=await res.json();
-    if(!res.ok) throw new Error(data.error||'Error desconocido');
-    closeModal();toast(`✅ "${nombre}" creado — recibirá email de acceso`);
-    renderClientes(document.getElementById('page-content'));
-  }catch(e){
-    err.textContent='Error: '+e.message;err.style.display='block';
-    if(btn){btn.disabled=false;btn.textContent='Crear acceso';}
+async function enviarComando(deviceId, comando) {
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Enviando…';
+
+  try {
+    const {error} = await _sb.from('device_commands').insert({
+      device_id: deviceId,
+      command: comando,
+      status: 'pending',
+      sent_by: userProfile.nombre
+    });
+
+    if (error) throw error;
+
+    toast(`Comando "${comando}" enviado ✓`);
+    
+    // Esperar respuesta (máx 10 segundos)
+    const timeout = setTimeout(() => {
+      toast('⚠️ El dispositivo no respondió', 5000);
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }, 10000);
+
+    // Escuchar respuesta
+    const channel = _sb.channel(`cmd_response_${deviceId}_${Date.now()}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'device_commands',
+        filter: `device_id=eq.${deviceId}`
+      }, payload => {
+        if (payload.new.command === comando && payload.new.status === 'completed') {
+          clearTimeout(timeout);
+          toast(`✅ Comando ejecutado: ${comando}`);
+          btn.disabled = false;
+          btn.textContent = originalText;
+          channel.unsubscribe();
+        }
+      })
+      .subscribe();
+
+  } catch (e) {
+    toast('Error: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
-async function revocarAcceso(empId, nombre){
-  document.getElementById('modal-box').innerHTML=`
-    <div class="modal-title">⚠️ Revocar acceso</div>
-    <div style="color:var(--muted);font-size:14px;margin-bottom:20px">¿Revocar el acceso de <strong style="color:var(--txt)">${nombre}</strong>? Su cuenta quedará inactiva.</div>
-    <div style="display:flex;gap:10px">
-      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-danger" style="flex:2" onclick="confirmarRevocar('${empId}')">Sí, revocar</button>
-    </div>`;
-  document.getElementById('modal-overlay').classList.add('show');
+async function guardarConfigDispositivo(deviceId) {
+  const location = document.getElementById('device-location')?.value?.trim() || null;
+  const event_id = document.getElementById('device-event')?.value || null;
+
+  const {error} = await _sb.from('control_devices').update({
+    location,
+    event_id
+  }).eq('id', deviceId);
+
+  if (error) {
+    toast('Error: ' + error.message);
+    return;
+  }
+
+  toast('Configuración guardada ✓');
+  closeModal();
+  renderDispositivos(document.getElementById('page-content'));
 }
 
-async function confirmarRevocar(empId){
-  await _sb.from('empleados').update({estado:'baja'}).eq('id',empId);
-  closeModal();toast('Acceso revocado');renderClientes(document.getElementById('page-content'));
-}
+async function refreshLogs(deviceId) {
+  const {data: logs} = await _sb.from('device_logs')
+    .select('*')
+    .eq('device_id', deviceId)
+    .order('created_at', {ascending: false})
+    .limit(50);
 
+  const logDiv = document.getElementById('device-logs');
+  if (logDiv) {
+    logDiv.innerHTML = (logs || []).map(log => {
+      const type = log.level === 'error' ? 'err' : log.level === 'warn' ? 'warn' : 'info';
+      return `<div class="${type}">[${new Date(log.created_at).toLocaleTimeString('es-ES')}] ${log.message}</div>`;
+    }).join('');
+  }
+}
 
 // ── EMPLEADOS ─────────────────────────────────────────────────────────────
 async function renderEmpleados(pc){
@@ -826,19 +647,16 @@ async function renderEmpleados(pc){
   pc.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
       <div style="font-family:Syne;font-size:20px;font-weight:700">${_empleados.length} empleados</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-g" onclick="renderEmpleados(document.getElementById('page-content'))">↺ Refrescar</button>
-      </div>
+      <button class="btn btn-g" onclick="renderEmpleados(document.getElementById('page-content'))">↺ Refrescar</button>
     </div>
     <div class="card">
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Nombre</th><th>Nº Emp.</th><th>Rol</th><th>Dpto.</th><th>IRPF</th><th>Staff</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Nº Emp.</th><th>Rol</th><th>Dpto.</th><th>Staff</th><th>Estado</th></tr></thead>
         <tbody>${_empleados.map(e=>`<tr>
           <td><div style="font-weight:500">${e.nombre}</div><div style="font-size:11px;color:var(--muted)">${e.email}</div></td>
           <td style="font-family:monospace;font-size:12px;color:var(--a3)">${e.numero_empleado||'—'}</td>
           <td><span class="badge b-gray" style="font-size:10px">${e.role}</span></td>
           <td style="color:var(--muted)">${e.departamento||'—'}</td>
-          <td style="color:var(--a1)">${e.irpf||15}%</td>
           <td>${e.staff_pin?'<span class="badge b-green" style="font-size:10px">🔢</span> ':''} ${e.staff_uid?'<span class="badge b-blue" style="font-size:10px">📡</span>':''}</td>
           <td><span class="badge ${e.estado==='activo'?'b-green':'b-gray'}">${e.estado||'activo'}</span></td>
         </tr>`).join('')}
@@ -846,7 +664,7 @@ async function renderEmpleados(pc){
       </table></div>
     </div>
     <div style="margin-top:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:9px;font-size:12px;color:var(--muted)">
-      ℹ️ Gestión completa de empleados (crear, editar, nóminas) está en <a href="https://inout-connect.vercel.app" target="_blank" style="color:var(--a3)">inout-connect</a>.
+      ℹ️ Gestión completa de empleados en <a href="https://inout-connect.vercel.app" target="_blank" style="color:var(--a3)">inout-connect</a>.
     </div>`;
 }
 
@@ -857,51 +675,16 @@ async function renderEventos(pc){
     <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">${_eventos.length} eventos</div>
     <div class="card">
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Nombre</th><th>Fecha</th><th>Lugar</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Fecha</th><th>Lugar</th><th>Estado</th></tr></thead>
         <tbody>${_eventos.map(e=>`<tr>
           <td style="font-weight:500">${e.nombre}</td>
           <td style="font-size:12px;color:var(--muted)">${(e.fecha_inicio||'').slice(0,10)}</td>
           <td style="font-size:12px;color:var(--muted)">${e.venue_nombre||'—'}${e.venue_ciudad?', '+e.venue_ciudad:''}</td>
           <td><span class="badge ${e.estado==='publicado'?'b-green':e.estado==='cancelado'?'b-red':'b-gray'}">${e.estado}</span></td>
-          <td>
-            <button class="btn btn-g" style="padding:5px 10px;font-size:11px" onclick="verStatsEvento('${e.id}','${e.nombre.replace(/'/g,"\\''")}')">📊 Stats</button>
-          </td>
         </tr>`).join('')}
         </tbody>
       </table></div>
     </div>`;
-}
-
-async function verStatsEvento(eventId, eventName){
-  document.getElementById('modal-box').innerHTML=`<div class="modal-title">📊 ${eventName}</div><div style="color:var(--muted)">Cargando…</div>`;
-  document.getElementById('modal-overlay').classList.add('show');
-  const[{data:wbs},{data:txs},{data:accs}]=await Promise.all([
-    _sb.from('rfid_wristbands').select('balance,status').eq('event_id',eventId),
-    _sb.from('rfid_transactions').select('type,amount').eq('event_id',eventId),
-    _sb.from('rfid_access_log').select('direction').eq('event_id',eventId),
-  ]);
-  const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
-  const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  const totalPur=(txs||[]).filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
-  const ins=(accs||[]).filter(a=>a.direction==='in').length;
-  const outs=(accs||[]).filter(a=>a.direction==='out').length;
-  document.getElementById('modal-box').innerHTML=`
-    <div class="modal-title">📊 ${eventName}</div>
-    <div class="g2 mb16">
-      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Pulseras activas</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--a1)">${(wbs||[]).length}</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Saldo en circulación</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--a1)">${fmt(totalBal)}€</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Total recargado</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--success)">${fmt(totalTop)}€</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:9px;text-align:center"><div style="font-size:11px;color:var(--muted)">Total consumido</div><div style="font-family:Syne;font-size:24px;font-weight:700;color:var(--a2)">${fmt(totalPur)}€</div></div>
-    </div>
-    <div style="padding:14px;background:var(--bg);border-radius:9px;margin-bottom:16px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Accesos totales</div>
-      <div style="display:flex;gap:16px">
-        <span style="color:var(--success)">↗ ${ins} entradas</span>
-        <span style="color:var(--a3)">↙ ${outs} salidas</span>
-        <span style="color:var(--warn)">Dentro: ${Math.max(0,ins-outs)}</span>
-      </div>
-    </div>
-    <button class="btn btn-g btn-full" onclick="closeModal()">Cerrar</button>`;
 }
 
 // ── PULSERAS ──────────────────────────────────────────────────────────────
@@ -909,32 +692,20 @@ async function renderPulseras(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando pulseras…</div>';
   const{data:wbs}=await _sb.from('rfid_wristbands').select('*').order('created_at',{ascending:false}).limit(100);
   pc.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div style="font-family:Syne;font-size:20px;font-weight:700">${(wbs||[]).length} pulseras</div>
-    </div>
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">${(wbs||[]).length} pulseras</div>
     <div class="card">
       <div class="tbl-wrap"><table>
-        <thead><tr><th>UID</th><th>Titular</th><th>Saldo</th><th>Estado</th><th>Último uso</th><th></th></tr></thead>
+        <thead><tr><th>UID</th><th>Titular</th><th>Saldo</th><th>Estado</th><th>Último uso</th></tr></thead>
         <tbody>${(wbs||[]).map(w=>`<tr>
           <td style="font-family:monospace;font-size:12px;color:var(--a3)">${w.uid}</td>
           <td style="font-weight:500">${w.holder_name||'Sin nombre'}</td>
           <td style="color:var(--a1);font-weight:600">${fmt(w.balance)}€</td>
           <td><span class="badge ${w.status==='active'?'b-green':'b-red'}">${w.status}</span></td>
           <td style="font-size:12px;color:var(--muted)">${w.last_used_at?new Date(w.last_used_at).toLocaleDateString('es-ES'):'—'}</td>
-          <td>
-            <button class="btn btn-g" style="padding:4px 8px;font-size:11px" onclick="toggleWristband('${w.id}','${w.status}')">${w.status==='active'?'🔒 Bloquear':'🔓 Activar'}</button>
-          </td>
         </tr>`).join('')}
         </tbody>
       </table></div>
     </div>`;
-}
-
-async function toggleWristband(id, currentStatus){
-  const newStatus=currentStatus==='active'?'blocked':'active';
-  await _sb.from('rfid_wristbands').update({status:newStatus}).eq('id',id);
-  toast(`Pulsera ${newStatus==='active'?'activada':'bloqueada'} ✓`);
-  renderPulseras(document.getElementById('page-content'));
 }
 
 // ── FICHAJES ──────────────────────────────────────────────────────────────
@@ -951,7 +722,7 @@ async function renderFichajes(pc){
   }catch(_){}
   pc.innerHTML=`
     <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">Fichajes — semana actual</div>
-    ${!data.length?'<div class="card" style="text-align:center;padding:40px;color:var(--muted)">Sin fichajes esta semana. Ejecuta el SQL migration de staff.</div>':`
+    ${!data.length?'<div class="card" style="text-align:center;padding:40px;color:var(--muted)">Sin fichajes esta semana.</div>':`
     <div class="card">
       <div class="tbl-wrap"><table>
         <thead><tr><th>Empleado</th><th>Dept.</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Estado</th></tr></thead>
@@ -969,70 +740,28 @@ async function renderFichajes(pc){
 }
 
 // ── INFORMES ─────────────────────────────────────────────────────────────
-let _informeTab='sistema';
-
 async function renderInformes(pc){
   pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando…</div>';
-  let orgs=[], informesStaff=[], wbs=[], txs=[];
-  try{
-    const[r1,r2,r3,r4]=await Promise.all([
-      _sb.from('organizations').select('id,slug,nombre').order('nombre'),
-      _sb.from('staff_weekly_reports').select('*').order('semana_inicio',{ascending:false}).limit(20),
-      _sb.from('rfid_wristbands').select('balance,status,org_id'),
-      _sb.from('rfid_transactions').select('type,amount,org_id,created_at').order('created_at',{ascending:false}).limit(500),
-    ]);
-    if(!r1.error) orgs=r1.data||[];
-    if(!r2.error) informesStaff=r2.data||[];
-    if(!r3.error) wbs=r3.data||[];
-    if(!r4.error) txs=r4.data||[];
-  }catch(_){}
+  const[{data:wbs},{data:txs}]=await Promise.all([
+    _sb.from('rfid_wristbands').select('balance,status'),
+    _sb.from('rfid_transactions').select('type,amount,created_at').order('created_at',{ascending:false}).limit(500),
+  ]);
+  const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
+  const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const totalPur=(txs||[]).filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
 
-  const totalBal=wbs.reduce((s,w)=>s+parseFloat(w.balance||0),0);
-  const totalTop=txs.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  const totalPur=txs.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
-
-  const orgStats={};
-  orgs.forEach(o=>{
-    const owbs=wbs.filter(w=>w.org_id===o.id);
-    const otxs=txs.filter(t=>t.org_id===o.id);
-    orgStats[o.id]={
-      nombre:o.nombre,slug:o.slug,
-      saldo:owbs.reduce((s,w)=>s+parseFloat(w.balance||0),0),
-      pulseras:owbs.length,
-      recargado:otxs.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0),
-      consumido:otxs.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0),
-      txCount:otxs.length,
-    };
-  });
-
-  pc.innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-      <div style="font-family:Syne;font-size:20px;font-weight:700">Informes</div>
-      <button class="btn btn-p" onclick="generarInformeSemana()">⚡ Generar informe staff</button>
-    </div>
-    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
-      <button class="btn ${_informeTab==='sistema'?'btn-p':'btn-g'}" onclick="_informeTab='sistema';renderInformes(document.getElementById('page-content'))" style="font-size:12px;padding:7px 14px">🌐 Global</button>
-      <button class="btn ${_informeTab==='org'?'btn-p':'btn-g'}" onclick="_informeTab='org';renderInformes(document.getElementById('page-content'))" style="font-size:12px;padding:7px 14px">🏢 Por organización</button>
-      <button class="btn ${_informeTab==='staff'?'btn-p':'btn-g'}" onclick="_informeTab='staff';renderInformes(document.getElementById('page-content'))" style="font-size:12px;padding:7px 14px">👷 Fichajes staff</button>
-    </div>
-    <div id="informe-body">
-      ${_informeTab==='sistema'?buildInformeSistema(totalBal,totalTop,totalPur,txs,wbs):''}
-      ${_informeTab==='org'?buildInformeOrgs(orgStats):''}
-      ${_informeTab==='staff'?buildInformeStaff(informesStaff):''}
-    </div>`;
-}
-
-function buildInformeSistema(totalBal,totalTop,totalPur,txs,wbs){
   const hoy=new Date(); hoy.setHours(0,0,0,0);
-  const txHoy=txs.filter(t=>new Date(t.created_at)>=hoy);
+  const txHoy=(txs||[]).filter(t=>new Date(t.created_at)>=hoy);
   const topHoy=txHoy.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
   const purHoy=txHoy.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
-  return `
+
+  pc.innerHTML=`
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">Informes</div>
     <div class="g4 mb16">
       <div class="stat"><div class="stat-lbl">Saldo en circulación</div><div class="stat-val" style="color:var(--a1);font-size:20px">${fmt(totalBal)}€</div></div>
       <div class="stat"><div class="stat-lbl">Total recargado</div><div class="stat-val" style="color:var(--success);font-size:20px">${fmt(totalTop)}€</div></div>
       <div class="stat"><div class="stat-lbl">Total consumido</div><div class="stat-val" style="color:var(--a2);font-size:20px">${fmt(totalPur)}€</div></div>
-      <div class="stat"><div class="stat-lbl">Pulseras activas</div><div class="stat-val" style="color:var(--a3)">${wbs.filter(w=>w.status==='active').length}</div></div>
+      <div class="stat"><div class="stat-lbl">Pulseras activas</div><div class="stat-val" style="color:var(--a3)">${(wbs||[]).filter(w=>w.status==='active').length}</div></div>
     </div>
     <div class="g2">
       <div class="card"><div class="card-title">Hoy</div>
@@ -1047,66 +776,6 @@ function buildInformeSistema(totalBal,totalTop,totalPur,txs,wbs){
     </div>`;
 }
 
-function buildInformeOrgs(orgStats){
-  const items=Object.values(orgStats);
-  if(!items.length) return `<div class="card" style="text-align:center;padding:40px"><div style="font-size:36px;margin-bottom:12px">🏢</div><div style="color:var(--muted)">Sin organizaciones aún. Ejecuta el Bloque B y C del migration SQL.</div></div>`;
-  return `<div class="card"><div class="tbl-wrap"><table>
-    <thead><tr><th>Organización</th><th>Pulseras</th><th>Saldo</th><th>Recargado</th><th>Consumido</th><th>Tx</th></tr></thead>
-    <tbody>
-    ${items.map(o=>`<tr>
-      <td><div style="font-weight:600">${o.nombre}</div><div style="font-size:11px;color:var(--muted);font-family:monospace">/${o.slug}</div></td>
-      <td style="color:var(--a3)">${o.pulseras}</td>
-      <td style="color:var(--a1);font-weight:600">${fmt(o.saldo)}€</td>
-      <td style="color:var(--success)">${fmt(o.recargado)}€</td>
-      <td style="color:var(--a2)">${fmt(o.consumido)}€</td>
-      <td style="color:var(--muted)">${o.txCount}</td>
-    </tr>`).join('')}
-    <tr style="border-top:2px solid var(--border)">
-      <td style="font-weight:700">TOTAL</td>
-      <td style="font-weight:700;color:var(--a3)">${items.reduce((s,o)=>s+o.pulseras,0)}</td>
-      <td style="font-weight:700;color:var(--a1)">${fmt(items.reduce((s,o)=>s+o.saldo,0))}€</td>
-      <td style="font-weight:700;color:var(--success)">${fmt(items.reduce((s,o)=>s+o.recargado,0))}€</td>
-      <td style="font-weight:700;color:var(--a2)">${fmt(items.reduce((s,o)=>s+o.consumido,0))}€</td>
-      <td style="font-weight:700;color:var(--muted)">${items.reduce((s,o)=>s+o.txCount,0)}</td>
-    </tr>
-    </tbody></table></div></div>`;
-}
-
-function buildInformeStaff(informes){
-  if(!informes.length) return `<div class="card" style="text-align:center;padding:40px"><div style="font-size:36px;margin-bottom:12px">👷</div><div style="color:var(--muted);margin-bottom:16px">Sin informes de fichaje. Ejecuta el SQL migration de staff.</div><button class="btn btn-p" onclick="generarInformeSemana()">⚡ Generar ahora</button></div>`;
-  return `<div class="card"><div class="tbl-wrap"><table>
-    <thead><tr><th>Semana</th><th>Empleados</th><th>Horas totales</th><th>Media/empleado</th><th>Generado</th></tr></thead>
-    <tbody>${informes.map(i=>{
-      const media=i.total_empleados>0?Math.round((i.total_minutos||0)/i.total_empleados):0;
-      return`<tr>
-        <td style="font-weight:500">Semana del ${new Date(i.semana_inicio).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})}</td>
-        <td style="color:var(--a3)">${i.total_empleados}</td>
-        <td style="color:var(--a1);font-weight:600">${minsToHHMM(i.total_minutos||0)}</td>
-        <td style="color:var(--muted)">${minsToHHMM(media)}</td>
-        <td style="font-size:12px;color:var(--muted)">${new Date(i.generado_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
-      </tr>`;
-    }).join('')}
-    </tbody></table></div></div>`;
-}
-
-async function generarInformeSemana(){
-  const weekStart=new Date();
-  weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));
-  weekStart.setHours(0,0,0,0);
-  let fichs=[];
-  try{
-    const{data:fd,error}=await _sb.from('staff_checkins').select('empleado_id,minutos').gte('entrada_at',weekStart.toISOString()).not('minutos','is',null);
-    if(!error) fichs=fd||[];
-  }catch(_){}
-  if(!fichs.length){toast('Sin datos de fichaje esta semana');return;}
-  const emps=new Set(fichs.map(f=>f.empleado_id)).size;
-  const totalMins=fichs.reduce((s,f)=>s+(f.minutos||0),0);
-  const{error}=await _sb.from('staff_weekly_reports').upsert({semana_inicio:weekStart.toISOString(),total_empleados:emps,total_minutos:totalMins,generado_at:new Date().toISOString()},{onConflict:'semana_inicio'}).catch(e=>({error:e}));
-  if(error){toast('Error: '+(error.message||'tabla no existe, ejecuta SQL migration'));return;}
-  toast(`Informe generado ✓ — ${emps} empleados · ${minsToHHMM(totalMins)}`);
-  _informeTab='staff';
-  renderInformes(document.getElementById('page-content'));
-}
 // ── TRANSACCIONES ─────────────────────────────────────────────────────────
 async function renderTransacciones(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando…</div>';
