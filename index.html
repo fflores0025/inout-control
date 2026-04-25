@@ -203,15 +203,23 @@ async function doLogin(){
     if(error) throw error;
     const{data:p}=await _sb.from('empleados').select('*, organizations(nombre,id)').eq('auth_user_id',data.user.id).single();
     
+    // 🔍 DEBUG: Ver qué datos devuelve
+    console.log('🔍 DEBUG LOGIN:');
+    console.log('Email buscado:', email);
+    console.log('auth_user_id:', data.user.id);
+    console.log('Empleado encontrado:', p);
+    console.log('Rol detectado:', p?.role);
+    console.log('Organization ID:', p?.organization_id);
+    
     // ⚠️ CRÍTICO: Solo SUPERADMIN puede acceder a Control
-    // org_admin → usa inout-connect
-    // resto → usan apps operativas
     if(!p||p.role!=='superadmin'){
+      console.log('❌ ACCESO DENEGADO - Rol:', p?.role || 'sin rol');
       err.textContent='⛔ Acceso denegado. Solo SuperAdmin de InOut Media.';
       err.style.display='block';
       await _sb.auth.signOut(); return;
     }
     
+    console.log('✅ ACCESO PERMITIDO - SuperAdmin detectado');
     currentUser=data.user;
     userProfile={
       nombre:p.nombre,
@@ -224,6 +232,7 @@ async function doLogin(){
     };
     enterApp();
   }catch(e){
+    console.error('❌ ERROR LOGIN:', e);
     err.textContent=e.message==='Invalid login credentials'?'Email o contraseña incorrectos':e.message;
     err.style.display='block';
   }
