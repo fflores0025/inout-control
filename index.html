@@ -201,25 +201,56 @@ async function doLogin(){
   try{
     const{data,error}=await _sb.auth.signInWithPassword({email,password:pass});
     if(error) throw error;
-    const{data:p}=await _sb.from('empleados').select('*, organizations(nombre,id)').eq('auth_user_id',data.user.id).single();
     
-    // 🔍 DEBUG: Ver qué datos devuelve
-    console.log('🔍 DEBUG LOGIN:');
-    console.log('Email buscado:', email);
-    console.log('auth_user_id:', data.user.id);
-    console.log('Empleado encontrado:', p);
-    console.log('Rol detectado:', p?.role);
-    console.log('Organization ID:', p?.organization_id);
+    console.log('🔍 DEBUG LOGIN - PASO 1: Auth exitoso');
+    console.log('User ID:', data.user.id);
+    console.log('Email:', data.user.email);
     
-    // ⚠️ CRÍTICO: Solo SUPERADMIN puede acceder a Control
+    // Intentar query con auth_user_id
+    const query1 = await _sb.from('empleados')
+      .select('*, organizations(nombre,id)')
+      .eq('auth_user_id',data.user.id)
+      .single();
+    
+    console.log('🔍 DEBUG LOGIN - PASO 2: Query por auth_user_id');
+    console.log('Query completa:', {
+      table: 'empleados',
+      filter: `auth_user_id = ${data.user.id}`,
+      result: query1
+    });
+    console.log('Data:', query1.data);
+    console.log('Error:', query1.error);
+    console.log('Error code:', query1.error?.code);
+    console.log('Error message:', query1.error?.message);
+    console.log('Error details:', query1.error?.details);
+    
+    // Si no encuentra por auth_user_id, intentar por email
+    let p = query1.data;
+    if(!p){
+      console.log('⚠️ No encontrado por auth_user_id, intentando por email...');
+      const query2 = await _sb.from('empleados')
+        .select('*, organizations(nombre,id)')
+        .eq('email', email)
+        .single();
+      console.log('Query por email result:', query2);
+      console.log('Data:', query2.data);
+      console.log('Error:', query2.error);
+      p = query2.data;
+    }
+    
+    console.log('🔍 DEBUG LOGIN - PASO 3: Empleado final');
+    console.log('Empleado:', p);
+    console.log('Rol:', p?.role);
+    
     if(!p||p.role!=='superadmin'){
-      console.log('❌ ACCESO DENEGADO - Rol:', p?.role || 'sin rol');
+      console.log('❌ ACCESO DENEGADO');
+      console.log('Razón:', !p ? 'No se encontró empleado' : `Rol incorrecto: ${p.role}`);
       err.textContent='⛔ Acceso denegado. Solo SuperAdmin de InOut Media.';
       err.style.display='block';
       await _sb.auth.signOut(); return;
     }
     
-    console.log('✅ ACCESO PERMITIDO - SuperAdmin detectado');
+    console.log('✅ ACCESO PERMITIDO');
     currentUser=data.user;
     userProfile={
       nombre:p.nombre,
@@ -306,19 +337,30 @@ function navigate(page){
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────
 async function renderDashboard(pc){
-  pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando…</div>`;
-  const[{data:wbs},{data:txs},{data:accesos},{data:checkins},{data:devices}]=await Promise.all([
-    _sb.from('rfid_wristbands').select('id,status,balance'),
-    _sb.from('rfid_transactions').select('type,amount').order('created_at',{ascending:false}).limit(500),
-    _sb.from('rfid_access_log').select('direction').gte('created_at',new Date(Date.now()-86400000).toISOString()),
-    _sb.from('staff_checkins').select('*').is('salida_at',null),
-    _sb.from('control_devices').select('id,last_seen'),
-  ]);
-  const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
-  const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
-  const activasHoy=Math.max(0,(accesos||[]).filter(a=>a.direction==='in').length-(accesos||[]).filter(a=>a.direction==='out').length);
-  const trabajando=(checkins||[]).length;
-  const devicesOnline=(devices||[]).filter(d=>d.last_seen&&(Date.now()-new Date(d.last_seen).getTime())<300000).length;
+  pc.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:center;min-height:60vh;flex-direction:column;gap:16px">
+      <div style="width:48px;height:48px;border:4px solid var(--border);border-top-color:var(--a1);border-radius:50%;animation:spin 1s linear infinite"></div>
+      <div style="color:var(--muted);font-size:14px">Cargando dashboard...</div>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  `;
+  
+  try{
+    const[{data:wbs},{data:txs},{data:accesos},{data:checkins},{data:devices}]=await Promise.all([
+      _sb.from('rfid_wristbands').select('id,status,balance'),
+      _sb.from('rfid_transactions').select('type,amount').order('created_at',{ascending:false}).limit(500),
+      _sb.from('rfid_access_log').select('direction').gte('created_at',new Date(Date.now()-86400000).toISOString()),
+      _sb.from('staff_checkins').select('*').is('salida_at',null),
+      _sb.from('control_devices').select('id,last_seen'),
+    ]);
+    
+    console.log('📊 Dashboard data loaded:', {wbs, txs, accesos, checkins, devices});
+    
+    const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
+    const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+    const activasHoy=Math.max(0,(accesos||[]).filter(a=>a.direction==='in').length-(accesos||[]).filter(a=>a.direction==='out').length);
+    const trabajando=(checkins||[]).length;
+    const devicesOnline=(devices||[]).filter(d=>d.last_seen&&(Date.now()-new Date(d.last_seen).getTime())<300000).length;
 
   pc.innerHTML=`
     <div class="page-hd" style="margin-bottom:20px"><div style="font-family:Syne;font-size:22px;font-weight:700">Dashboard</div></div>
@@ -377,6 +419,17 @@ async function renderDashboard(pc){
         })()}
       </div>
     </div>`;
+  }catch(e){
+    console.error('❌ ERROR RENDERIZANDO DASHBOARD:', e);
+    pc.innerHTML=`
+      <div class="card" style="text-align:center;padding:40px">
+        <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+        <div style="color:var(--danger);margin-bottom:16px;font-size:18px">Error cargando dashboard</div>
+        <div style="color:var(--muted);font-size:13px;font-family:monospace;background:var(--bg);padding:12px;border-radius:8px;max-width:600px;margin:0 auto">${e.message}</div>
+        <button class="btn btn-p" style="margin-top:20px" onclick="navigate('dashboard')">🔄 Reintentar</button>
+      </div>
+    `;
+  }
 }
 
 // ── DISPOSITIVOS ──────────────────────────────────────────────────────────
@@ -863,11 +916,29 @@ async function renderTransacciones(pc){
 
 // ── AUTO-LOGIN ─────────────────────────────────────────────────────────────
 (async function(){
+  console.log('🔍 AUTO-LOGIN: Iniciando...');
+  
   const{data:{session}}=await _sb.auth.getSession();
+  console.log('🔍 AUTO-LOGIN: Sesión encontrada:', session ? 'Sí' : 'No');
+  
   if(session?.user){
-    const{data:p}=await _sb.from('empleados').select('*, organizations(nombre,id)').eq('auth_user_id',session.user.id).single();
-    // Solo SuperAdmin puede acceder
+    console.log('🔍 AUTO-LOGIN: User ID:', session.user.id);
+    console.log('🔍 AUTO-LOGIN: Email:', session.user.email);
+    
+    const{data:p,error}=await _sb.from('empleados').select('*, organizations(nombre,id)').eq('auth_user_id',session.user.id).single();
+    console.log('🔍 AUTO-LOGIN: Query empleado result:', p);
+    console.log('🔍 AUTO-LOGIN: Query error:', error);
+    
+    // Si no encuentra por auth_user_id, intentar por email
+    if(!p && session.user.email){
+      console.log('⚠️ AUTO-LOGIN: No encontrado por auth_user_id, intentando por email...');
+      const{data:p2}=await _sb.from('empleados').select('*, organizations(nombre,id)').eq('email',session.user.email).single();
+      console.log('🔍 AUTO-LOGIN: Query por email result:', p2);
+      if(p2) p = p2;
+    }
+    
     if(p&&p.role==='superadmin'){
+      console.log('✅ AUTO-LOGIN: SuperAdmin detectado, entrando...');
       currentUser=session.user;
       userProfile={
         nombre:p.nombre,
@@ -878,9 +949,15 @@ async function renderTransacciones(pc){
         organization_id:p.organization_id,
         organization:p.organizations
       };
-      enterApp(); return;
+      enterApp(); 
+      return;
+    } else {
+      console.log('❌ AUTO-LOGIN: No es superadmin o no encontrado');
+      console.log('Rol:', p?.role);
     }
   }
+  
+  console.log('🔍 AUTO-LOGIN: Mostrando pantalla de login');
   document.getElementById('login-screen').style.display='flex';
 })();
 </script>
