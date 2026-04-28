@@ -206,35 +206,24 @@ async function doLogin(){
     console.log('User ID:', data.user.id);
     console.log('Email:', data.user.email);
     
-    // Intentar query con auth_user_id
+    // Query SIN el join de organizations para evitar PGRST201
     const query1 = await _sb.from('empleados')
-      .select('*, organizations(nombre,id)')
+      .select('*')
       .eq('auth_user_id',data.user.id)
       .single();
     
     console.log('🔍 DEBUG LOGIN - PASO 2: Query por auth_user_id');
-    console.log('Query completa:', {
-      table: 'empleados',
-      filter: `auth_user_id = ${data.user.id}`,
-      result: query1
-    });
     console.log('Data:', query1.data);
     console.log('Error:', query1.error);
-    console.log('Error code:', query1.error?.code);
-    console.log('Error message:', query1.error?.message);
-    console.log('Error details:', query1.error?.details);
     
-    // Si no encuentra por auth_user_id, intentar por email
     let p = query1.data;
     if(!p){
       console.log('⚠️ No encontrado por auth_user_id, intentando por email...');
       const query2 = await _sb.from('empleados')
-        .select('*, organizations(nombre,id)')
+        .select('*')
         .eq('email', email)
         .single();
-      console.log('Query por email result:', query2);
-      console.log('Data:', query2.data);
-      console.log('Error:', query2.error);
+      console.log('Query por email:', query2.data);
       p = query2.data;
     }
     
@@ -244,7 +233,6 @@ async function doLogin(){
     
     if(!p||p.role!=='superadmin'){
       console.log('❌ ACCESO DENEGADO');
-      console.log('Razón:', !p ? 'No se encontró empleado' : `Rol incorrecto: ${p.role}`);
       err.textContent='⛔ Acceso denegado. Solo SuperAdmin de InOut Media.';
       err.style.display='block';
       await _sb.auth.signOut(); return;
@@ -259,7 +247,7 @@ async function doLogin(){
       id:p.id,
       _sbId:p.id,
       organization_id:p.organization_id,
-      organization:p.organizations
+      organization:null  // Lo cargaremos después si hace falta
     };
     enterApp();
   }catch(e){
@@ -925,17 +913,9 @@ async function renderTransacciones(pc){
     console.log('🔍 AUTO-LOGIN: User ID:', session.user.id);
     console.log('🔍 AUTO-LOGIN: Email:', session.user.email);
     
-    const{data:p,error}=await _sb.from('empleados').select('*, organizations(nombre,id)').eq('auth_user_id',session.user.id).single();
+    const{data:p,error}=await _sb.from('empleados').select('*').eq('auth_user_id',session.user.id).single();
     console.log('🔍 AUTO-LOGIN: Query empleado result:', p);
     console.log('🔍 AUTO-LOGIN: Query error:', error);
-    
-    // Si no encuentra por auth_user_id, intentar por email
-    if(!p && session.user.email){
-      console.log('⚠️ AUTO-LOGIN: No encontrado por auth_user_id, intentando por email...');
-      const{data:p2}=await _sb.from('empleados').select('*, organizations(nombre,id)').eq('email',session.user.email).single();
-      console.log('🔍 AUTO-LOGIN: Query por email result:', p2);
-      if(p2) p = p2;
-    }
     
     if(p&&p.role==='superadmin'){
       console.log('✅ AUTO-LOGIN: SuperAdmin detectado, entrando...');
@@ -947,7 +927,7 @@ async function renderTransacciones(pc){
         id:p.id,
         _sbId:p.id,
         organization_id:p.organization_id,
-        organization:p.organizations
+        organization:null
       };
       enterApp(); 
       return;
