@@ -422,6 +422,181 @@ async function renderDashboard(pc){
   }
 }
 
+// ── DISPOSITIVOS ──────────────────────────────────────────────────────────
+async function renderDispositivos(pc){
+  // Limpiar intervalo anterior si existe
+  if (_dispositivosInterval) {
+    clearInterval(_dispositivosInterval);
+    _dispositivosInterval = null;
+  }
+  
+  pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando dispositivos…</div>`;
+  
+  async function cargarYMostrarDispositivos() {
+    let devices=[];
+    try{
+      const{data:devs,error}=await _sb.from('control_devices')
+        .select('*')
+        .order('last_seen',{ascending:false});
+      if(error){
+        console.warn('Error cargando dispositivos:',error);
+        pc.innerHTML=`
+          <div class="card" style="text-align:center;padding:40px">
+            <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+            <div style="color:var(--muted);margin-bottom:16px">No se pudo cargar la tabla control_devices</div>
+            <div style="font-size:12px;color:var(--muted);max-width:500px;margin:0 auto;line-height:1.6">
+              <strong>Posibles causas:</strong><br>
+              • La tabla no existe en Supabase<br>
+              • Falta configurar RLS (Row Level Security)<br>
+              • No tienes permisos para leer la tabla
+            </div>
+            <button class="btn btn-p" style="margin-top:20px" onclick="window.open('https://supabase.com/dashboard/project/raoxkjnwrccoxjcipfpv/editor','_blank')">
+              📝 Abrir Supabase SQL Editor
+            </button>
+          </div>`;
+        return;
+      }
+      devices=devs||[];
+    }catch(e){
+      console.error('Error:', e);
+      pc.innerHTML=`<div class="card" style="text-align:center;padding:40px;color:var(--danger)">Error: ${e.message}</div>`;
+      return;
+    }
+
+    const onlineCount = devices.filter(d => {
+      const lastSeen = d.last_seen ? new Date(d.last_seen) : null;
+      return lastSeen && (Date.now() - lastSeen.getTime()) < 300000;
+    }).length;
+    
+    // Agrupar por tipo
+    const byType = {
+      valid: devices.filter(d => d.type === 'valid'),
+      kiosk: devices.filter(d => d.type === 'kiosk'),
+      register: devices.filter(d => d.type === 'register'),
+      control: devices.filter(d => d.type === 'control'),
+      staff: devices.filter(d => d.type === 'staff'),
+    };
+
+    pc.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-family:Syne;font-size:20px;font-weight:700">${devices.length} dispositivos registrados</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">
+            <span style="color:var(--success)">●</span> ${onlineCount} online
+            <span style="margin-left:12px;color:var(--muted)">●</span> ${devices.length - onlineCount} offline
+            <span style="margin-left:12px;color:var(--a3)">↻</span> Auto-refresh 30s
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-g" onclick="renderDispositivos(document.getElementById('page-content'))">↺ Refrescar ahora</button>
+        </div>
+      </div>
+
+      ${!devices.length ? `
+        <div class="card" style="text-align:center;padding:40px">
+          <div style="font-size:40px;margin-bottom:12px">📱</div>
+          <div style="color:var(--muted);margin-bottom:16px">No hay dispositivos registrados aún.</div>
+          <div style="font-size:12px;color:var(--muted);max-width:500px;margin:0 auto;line-height:1.6;margin-bottom:20px">
+            Los dispositivos se registran automáticamente cuando abres cualquier app con el sistema de heartbeat integrado.
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <button class="btn btn-p" onclick="window.open('https://inout-valid.vercel.app','_blank')">📡 Abrir inout-valid</button>
+            <button class="btn btn-p" onclick="window.open('https://inout-kiosk.vercel.app','_blank')">🎟️ Abrir inout-kiosk</button>
+            <button class="btn btn-p" onclick="window.open('https://inout-register.vercel.app','_blank')">📝 Abrir inout-register</button>
+          </div>
+        </div>`
+      : `
+        ${Object.entries(byType).filter(([type, devs]) => devs.length > 0).map(([type, devs]) => `
+          <div class="card mb16">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+              <div style="font-size:24px">${DEVICE_TYPES[type]?.icon || '📱'}</div>
+              <div>
+                <div style="font-family:Syne;font-weight:700;font-size:15px">${DEVICE_TYPES[type]?.label || type}</div>
+                <div style="font-size:11px;color:var(--muted)">${devs.length} dispositivo${devs.length !== 1 ? 's' : ''}</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+              ${devs.map(d => renderDeviceCard(d)).join('')}
+            </div>
+          </div>
+        `).join('')}
+      `}
+    `;
+  }
+  
+  // Cargar inmediatamente
+  await cargarYMostrarDispositivos();
+  
+  // Auto-refresh cada 30 segundos
+  _dispositivosInterval = setInterval(cargarYMostrarDispositivos, 30000);
+}
+
+function renderDeviceCard(d) {
+  const tipo = DEVICE_TYPES[d.type] || {label: d.type, icon: '📱', color: 'var(--muted)', url: '#'};
+  const lastSeen = d.last_seen ? new Date(d.last_seen) : null;
+  const isOnline = lastSeen && (Date.now() - lastSeen.getTime()) < 300000;
+  const lastSeenStr = lastSeen 
+    ? lastSeen.toLocaleString('es-ES', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'})
+    : 'Nunca';
+
+  const uptimeSeconds = d.uptime_seconds || 0;
+  const uptimeHours = Math.floor(uptimeSeconds / 3600);
+  const uptimeStr = uptimeHours > 0 
+    ? `${uptimeHours}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`
+    : uptimeSeconds >= 60 
+      ? `${Math.floor(uptimeSeconds / 60)}m`
+      : `${uptimeSeconds}s`;
+
+  return `
+    <div class="device-card ${isOnline ? 'online' : 'offline'}">
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:Syne;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px">
+            ${d.name || tipo.label}
+          </div>
+          <div style="font-size:10px;color:var(--muted)">${d.location || 'Sin ubicación'}</div>
+        </div>
+        <div class="device-status ${isOnline ? 'on' : 'off'}"></div>
+      </div>
+
+      ${d.user_name ? `
+        <div style="padding:8px;background:var(--bg);border-radius:6px;margin-bottom:10px;border-left:2px solid ${isOnline ? 'var(--success)' : 'var(--muted)'}">
+          <div style="font-size:11px;font-weight:600;margin-bottom:2px">${d.user_name}</div>
+          <div style="font-size:10px;color:var(--muted)">${d.user_role || '—'}</div>
+        </div>
+      ` : ''}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;font-size:11px">
+        <div>
+          <div style="color:var(--muted);font-size:9px;margin-bottom:2px">UPTIME</div>
+          <div style="font-weight:600;color:var(--a1)">${uptimeStr}</div>
+        </div>
+        <div>
+          <div style="color:var(--muted);font-size:9px;margin-bottom:2px">ÚLTIMA CONN.</div>
+          <div style="font-weight:500">${lastSeenStr.split(' ')[1] || lastSeenStr}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
+        <button class="btn btn-p" style="padding:6px 10px;font-size:11px" onclick="window.open('${d.url || tipo.url}','_blank')">
+          ↗️ Abrir
+        </button>
+        <button class="btn btn-danger" style="padding:6px 10px;font-size:11px" onclick="eliminarDispositivo('${d.id}')">
+          ✕
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function eliminarDispositivo(id){
+  if(!confirm('¿Eliminar este dispositivo del registro?')) return;
+  const{error}=await _sb.from('control_devices').delete().eq('id',id);
+  if(error){toast('Error: '+error.message);return;}
+  toast('Dispositivo eliminado ✓');
+  renderDispositivos(document.getElementById('page-content'));
+}
+  
 // ── ORGANIZACIONES ────────────────────────────────────────────────────────
 async function renderOrganizaciones(pc){
   pc.innerHTML=`<div style="color:var(--muted);padding:20px">Cargando organizaciones…</div>`;
