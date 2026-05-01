@@ -931,19 +931,162 @@ async function renderEmpleados(pc){
 async function renderEventos(pc){
   await cargarEventos();
   pc.innerHTML=`
-    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">${_eventos.length} eventos</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div style="font-family:Syne;font-size:20px;font-weight:700">${_eventos.length} eventos</div>
+      <button class="btn btn-p" onclick="modalNuevoEvento()">+ Nuevo evento</button>
+    </div>
     <div class="card">
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Nombre</th><th>Fecha</th><th>Lugar</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Fecha</th><th>Lugar</th><th>Estado</th><th></th></tr></thead>
         <tbody>${_eventos.map(e=>`<tr>
           <td style="font-weight:500">${e.nombre}</td>
           <td style="font-size:12px;color:var(--muted)">${(e.fecha_inicio||'').slice(0,10)}</td>
           <td style="font-size:12px;color:var(--muted)">${e.venue_nombre||'—'}${e.venue_ciudad?', '+e.venue_ciudad:''}</td>
           <td><span class="badge ${e.estado==='publicado'?'b-green':e.estado==='cancelado'?'b-red':'b-gray'}">${e.estado}</span></td>
+          <td><div style="display:flex;gap:6px">
+            <button class="btn btn-g" style="padding:4px 10px;font-size:11px" onclick="modalEditarEventoControl('${e.id}')">✏️ Editar</button>
+            <button class="btn btn-danger" style="padding:4px 10px;font-size:11px" onclick="confirmarEliminarEvento('${e.id}','${e.nombre.replace(/'/g,"\\'")}')">✕</button>
+          </div></td>
         </tr>`).join('')}
         </tbody>
       </table></div>
     </div>`;
+}
+
+function openModal(html){
+  document.getElementById('modal-box').innerHTML=html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function modalEditarEventoControl(id){
+  const ev=_eventos.find(e=>e.id===id); if(!ev) return;
+  const fi=(ev.fecha_inicio||'').slice(0,10);
+  const hi=(ev.fecha_inicio||'').slice(11,16)||'22:00';
+  const ff=(ev.fecha_fin||'').slice(0,10)||fi;
+  const hf=(ev.fecha_fin||'').slice(11,16)||'06:00';
+  openModal(`
+    <div class="modal-title">✏️ Editar evento</div>
+    <label class="form-lbl">Nombre</label>
+    <input class="form-input" id="ee-nombre" value="${ev.nombre}"/>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-lbl">Fecha inicio</label><input class="form-input" id="ee-fecha" type="date" value="${fi}"/></div>
+      <div><label class="form-lbl">Hora inicio</label><input class="form-input" id="ee-hora-inicio" type="time" value="${hi}"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-lbl">Fecha fin</label><input class="form-input" id="ee-fecha-fin" type="date" value="${ff}"/></div>
+      <div><label class="form-lbl">Hora fin</label><input class="form-input" id="ee-hora-fin" type="time" value="${hf}"/></div>
+    </div>
+    <label class="form-lbl">Lugar</label>
+    <input class="form-input" id="ee-lugar" value="${(ev.venue_nombre||'')+(ev.venue_ciudad?', '+ev.venue_ciudad:'')}"/>
+    <label class="form-lbl">Estado</label>
+    <select class="form-select" id="ee-estado">
+      ${['borrador','publicado','confirmado','produccion','agotado','cancelado','finalizado'].map(s=>`<option value="${s}" ${ev.estado===s?'selected':''}>${s}</option>`).join('')}
+    </select>
+    <label class="form-lbl">Notas</label>
+    <input class="form-input" id="ee-notas" value="${ev.notas||ev.descripcion||''}"/>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p" style="flex:2" onclick="guardarEventoControl('${id}')">Guardar cambios</button>
+    </div>`);
+}
+
+async function guardarEventoControl(id){
+  const lugar=document.getElementById('ee-lugar').value||'';
+  const parts=lugar.split(',');
+  const venue_nombre=parts[0]?.trim()||'';
+  const venue_ciudad=parts[1]?.trim()||'';
+  const fecha=document.getElementById('ee-fecha').value;
+  const hi=document.getElementById('ee-hora-inicio').value||'22:00';
+  const ff=document.getElementById('ee-fecha-fin').value||fecha;
+  const hf=document.getElementById('ee-hora-fin').value||'06:00';
+  const{error}=await _sb.from('events').update({
+    nombre:document.getElementById('ee-nombre').value.trim(),
+    fecha_inicio:fecha?`${fecha}T${hi}:00`:undefined,
+    fecha_fin:ff?`${ff}T${hf}:00`:undefined,
+    venue_nombre,venue_ciudad,
+    estado:document.getElementById('ee-estado').value,
+    notas:document.getElementById('ee-notas').value||null,
+  }).eq('id',id);
+  if(error){toast('Error: '+error.message);return;}
+  toast('Evento actualizado ✓');
+  closeModal();
+  await cargarEventos();
+  renderEventos(document.getElementById('page-content'));
+}
+
+function confirmarEliminarEvento(id,nombre){
+  openModal(`
+    <div class="modal-title">¿Eliminar evento?</div>
+    <div style="color:var(--muted);font-size:14px;margin-bottom:20px">
+      Vas a eliminar <strong style="color:var(--txt)">${nombre}</strong>. No se puede deshacer.
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" style="flex:2" onclick="ejecutarEliminarEvento('${id}')">Sí, eliminar</button>
+    </div>`);
+}
+
+async function ejecutarEliminarEvento(id){
+  const{error}=await _sb.from('events').delete().eq('id',id);
+  if(error){toast('Error: '+error.message);return;}
+  toast('Evento eliminado ✓');
+  closeModal();
+  await cargarEventos();
+  renderEventos(document.getElementById('page-content'));
+}
+
+function modalNuevoEvento(){
+  openModal(`
+    <div class="modal-title">+ Nuevo evento</div>
+    <label class="form-lbl">Nombre</label>
+    <input class="form-input" id="ne-nombre" placeholder="Festival, concierto…"/>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-lbl">Fecha inicio</label><input class="form-input" id="ne-fecha" type="date"/></div>
+      <div><label class="form-lbl">Hora inicio</label><input class="form-input" id="ne-hora" type="time" value="22:00"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-lbl">Fecha fin</label><input class="form-input" id="ne-fecha-fin" type="date"/></div>
+      <div><label class="form-lbl">Hora fin</label><input class="form-input" id="ne-hora-fin" type="time" value="06:00"/></div>
+    </div>
+    <label class="form-lbl">Lugar (Sala, Ciudad)</label>
+    <input class="form-input" id="ne-lugar" placeholder="Sala, Barcelona"/>
+    <label class="form-lbl">Estado</label>
+    <select class="form-select" id="ne-estado">
+      <option value="borrador">Borrador</option>
+      <option value="publicado">Publicado</option>
+      <option value="confirmado">Confirmado</option>
+    </select>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p" style="flex:2" onclick="crearEventoControl()">Crear evento</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('ne-nombre')?.focus(),80);
+}
+
+async function crearEventoControl(){
+  const nombre=document.getElementById('ne-nombre').value.trim();
+  if(!nombre){toast('⚠️ Nombre obligatorio');return;}
+  const fecha=document.getElementById('ne-fecha').value||new Date().toISOString().slice(0,10);
+  const hora=document.getElementById('ne-hora').value||'22:00';
+  const fechaFin=document.getElementById('ne-fecha-fin').value||fecha;
+  const horaFin=document.getElementById('ne-hora-fin').value||'06:00';
+  const lugar=document.getElementById('ne-lugar').value||'';
+  const parts=lugar.split(',');
+  const slug=nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-')+'-'+Date.now();
+  const{error}=await _sb.from('events').insert({
+    slug,nombre,
+    fecha_inicio:`${fecha}T${hora}:00`,
+    fecha_fin:`${fechaFin}T${horaFin}:00`,
+    venue_nombre:parts[0]?.trim()||'',
+    venue_ciudad:parts[1]?.trim()||'',
+    estado:document.getElementById('ne-estado').value,
+    creado_por:userProfile?.nombre||'superadmin'
+  });
+  if(error){toast('Error: '+error.message);return;}
+  toast(`Evento "${nombre}" creado ✓`);
+  closeModal();
+  await cargarEventos();
+  renderEventos(document.getElementById('page-content'));
 }
 
 // ── PULSERAS ──────────────────────────────────────────────────────────────
