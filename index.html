@@ -460,42 +460,66 @@ async function loadDeviceStats(device) {
   const content = document.getElementById('device-panel-content');
   
   try {
-    // Si el dispositivo no tiene pos_id, mostrar mensaje
-    if (!device.pos_id) {
-      content.innerHTML = `
-        <div class="card" style="text-align:center;padding:40px">
-          <div style="font-size:48px;opacity:.3;margin-bottom:12px">⚠️</div>
-          <div style="font-size:15px;font-weight:600;margin-bottom:8px">Sin POS ID asignado</div>
-          <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:300px;margin:0 auto;margin-bottom:20px">
-            Para ver estadísticas, asigna un <strong>POS ID</strong> en la pestaña Editar.
-          </div>
-          <button class="btn btn-p" onclick="switchDeviceTab('edit')">✏️ Asignar POS ID</button>
-        </div>
-      `;
-      return;
+    // Intentar primero con pos_id, si falla usar todas las transacciones
+    let txs = [];
+    let filterApplied = 'ninguno';
+    
+    // Intentar consulta con pos_id
+    try {
+      if (device.pos_id) {
+        const { data, error } = await _sb
+          .from('rfid_transactions')
+          .select('*')
+          .eq('pos_id', device.pos_id)
+          .gte('created_at', hoy.toISOString())
+          .order('created_at', { ascending: false });
+        
+        if (!error) {
+          txs = data || [];
+          filterApplied = 'pos_id: ' + device.pos_id;
+        }
+      }
+    } catch (e) {
+      console.warn('pos_id no existe en rfid_transactions, cargando todas las transacciones');
     }
     
-    // Cargar transacciones filtradas por pos_id
-    const { data: txs, error } = await _sb
-      .from('rfid_transactions')
-      .select('*')
-      .eq('pos_id', device.pos_id)
-      .gte('created_at', hoy.toISOString())
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
+    // Si no hay pos_id o falló, cargar todas las transacciones del día
+    if (txs.length === 0 && !device.pos_id) {
+      const { data, error } = await _sb
+        .from('rfid_transactions')
+        .select('*')
+        .gte('created_at', hoy.toISOString())
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      txs = data || [];
+      filterApplied = 'todas las transacciones del día';
+      
+      // Mostrar aviso de que no hay filtro
+      content.innerHTML = `
+        <div style="background:rgba(255,171,0,.1);border:1px solid rgba(255,171,0,.2);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--warn)">
+          ⚠️ Sin filtro: mostrando <strong>todas las transacciones</strong> del sistema.<br>
+          Asigna un <strong>POS ID</strong> en Editar para ver solo este dispositivo.
+        </div>
+        <div id="stats-content"></div>
+      `;
+    } else if (txs.length === 0) {
+      content.innerHTML = `<div id="stats-content"></div>`;
+    }
     
     const transactions = txs || [];
     
-    // Renderizar según tipo
+    // Renderizar según tipo (usar stats-content si existe, sino content)
+    const targetContainer = document.getElementById('stats-content') || content;
+    
     if (device.type === 'valid') {
-      renderValidStats(transactions, device);
+      renderValidStats(transactions, device, targetContainer, filterApplied);
     } else if (device.type === 'kiosk') {
-      renderKioskStats(transactions, device);
+      renderKioskStats(transactions, device, targetContainer, filterApplied);
     } else if (device.type === 'register') {
-      renderRegisterStats(transactions, device);
+      renderRegisterStats(transactions, device, targetContainer, filterApplied);
     } else {
-      renderGenericStats(transactions, device);
+      renderGenericStats(transactions, device, targetContainer, filterApplied);
     }
     
   } catch (error) {
@@ -1231,7 +1255,147 @@ async function eliminarDispositivo(id){
 // ══════════════════════════════════════════════════════════════════════════
 
 async function renderOrganizaciones(pc) {
-  pc.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Sección en desarrollo...</div>';
+  pc.innerHTML = '<div style="color:var(--muted);padding:20px">Cargando organizaciones...</div>';
+  
+  try {
+    const { data: orgs, error } = await _sb
+      .from('organizations')
+      .select('*')
+      .order('nombre');
+    
+    if (error) throw error;
+    
+    const organizaciones = orgs || [];
+    
+    pc.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:22px">🏢 Organizaciones</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">${organizaciones.length} organizaciones registradas</div>
+        </div>
+        <button class="btn btn-p" onclick="modalNuevaOrganizacion()">+ Nueva Organización</button>
+      </div>
+      
+      ${!organizaciones.length ? `
+        <div class="card" style="text-align:center;padding:60px">
+          <div style="font-size:64px;margin-bottom:16px;opacity:.3">🏢</div>
+          <div style="font-size:18px;font-weight:600;margin-bottom:8px">No hay organizaciones</div>
+          <div style="font-size:14px;color:var(--muted);margin-bottom:24px">Crea la primera organización para comenzar</div>
+          <button class="btn btn-p" onclick="modalNuevaOrganizacion()">+ Nueva Organización</button>
+        </div>
+      ` : `
+        <div class="card">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px">
+            ${organizaciones.map(org => `
+              <div class="device-card" style="padding:20px">
+                <div style="display:flex;align-items:start;gap:12px;margin-bottom:12px">
+                  <div style="font-size:32px">🏢</div>
+                  <div style="flex:1">
+                    <div style="font-weight:700;font-size:16px;margin-bottom:4px">${org.nombre}</div>
+                    <div style="font-size:12px;color:var(--muted);font-family:monospace">${org.slug || org.id.slice(0,8)}</div>
+                  </div>
+                </div>
+                ${org.email ? `<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px"><span style="opacity:.5">📧</span><span>${org.email}</span></div>` : ''}
+                ${org.telefono ? `<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px"><span style="opacity:.5">📞</span><span>${org.telefono}</span></div>` : ''}
+                ${org.ciudad ? `<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:12px"><span style="opacity:.5">📍</span><span>${org.ciudad}${org.pais ? ', ' + org.pais : ''}</span></div>` : ''}
+                <div style="display:flex;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+                  <button class="btn btn-g" style="flex:1;font-size:13px" onclick='editarOrganizacion(${JSON.stringify(org).replace(/'/g, "\\'")})'>✏️ Editar</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `}
+    `;
+  } catch (error) {
+    console.error('Error cargando organizaciones:', error);
+    pc.innerHTML = `<div class="card" style="text-align:center;padding:40px;color:var(--danger)">Error: ${error.message}</div>`;
+  }
+}
+
+function modalNuevaOrganizacion() {
+  openModal(`
+    <div class="modal-title">🏢 Nueva Organización</div>
+    <label class="form-lbl">Nombre de la organización</label>
+    <input class="form-input" id="org-nombre" placeholder="Ej: Festival XYZ" />
+    <label class="form-lbl">Slug (identificador único)</label>
+    <input class="form-input" id="org-slug" placeholder="festival-xyz" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'')" />
+    <label class="form-lbl">Email</label>
+    <input class="form-input" id="org-email" type="email" placeholder="info@festival.com" />
+    <label class="form-lbl">Teléfono</label>
+    <input class="form-input" id="org-telefono" type="tel" placeholder="+34 600 000 000" />
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label class="form-lbl">Ciudad</label><input class="form-input" id="org-ciudad" placeholder="Barcelona" /></div>
+      <div><label class="form-lbl">País</label><input class="form-input" id="org-pais" placeholder="España" /></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p" style="flex:2" onclick="crearOrganizacion()">Crear</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('org-nombre')?.focus(), 100);
+}
+
+async function crearOrganizacion() {
+  const nombre = document.getElementById('org-nombre')?.value?.trim();
+  const slug = document.getElementById('org-slug')?.value?.trim();
+  const email = document.getElementById('org-email')?.value?.trim();
+  const telefono = document.getElementById('org-telefono')?.value?.trim();
+  const ciudad = document.getElementById('org-ciudad')?.value?.trim();
+  const pais = document.getElementById('org-pais')?.value?.trim();
+  if (!nombre) { toast('⚠️ El nombre es obligatorio'); return; }
+  try {
+    const { error } = await _sb.from('organizations').insert({
+      id: crypto.randomUUID(), nombre, slug: slug || null, email: email || null,
+      telefono: telefono || null, ciudad: ciudad || null, pais: pais || null
+    });
+    if (error) throw error;
+    closeModal(); toast(`✅ ${nombre} creada correctamente`);
+    renderOrganizaciones(document.getElementById('page-content'));
+  } catch (error) {
+    console.error('Error:', error);
+    toast('❌ Error: ' + error.message);
+  }
+}
+
+function editarOrganizacion(org) {
+  openModal(`
+    <div class="modal-title">✏️ Editar: ${org.nombre}</div>
+    <label class="form-lbl">Nombre</label>
+    <input class="form-input" id="org-nombre" value="${org.nombre}" />
+    <label class="form-lbl">Slug</label>
+    <input class="form-input" id="org-slug" value="${org.slug || ''}" />
+    <label class="form-lbl">Email</label>
+    <input class="form-input" id="org-email" value="${org.email || ''}" />
+    <label class="form-lbl">Teléfono</label>
+    <input class="form-input" id="org-telefono" value="${org.telefono || ''}" />
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><label class="form-lbl">Ciudad</label><input class="form-input" id="org-ciudad" value="${org.ciudad || ''}" /></div>
+      <div><label class="form-lbl">País</label><input class="form-input" id="org-pais" value="${org.pais || ''}" /></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p" style="flex:2" onclick="actualizarOrganizacion('${org.id}')">Guardar</button>
+    </div>
+  `);
+}
+
+async function actualizarOrganizacion(id) {
+  const nombre = document.getElementById('org-nombre')?.value?.trim();
+  if (!nombre) { toast('⚠️ Nombre obligatorio'); return; }
+  try {
+    const { error } = await _sb.from('organizations').update({
+      nombre, slug: document.getElementById('org-slug')?.value?.trim() || null,
+      email: document.getElementById('org-email')?.value?.trim() || null,
+      telefono: document.getElementById('org-telefono')?.value?.trim() || null,
+      ciudad: document.getElementById('org-ciudad')?.value?.trim() || null,
+      pais: document.getElementById('org-pais')?.value?.trim() || null
+    }).eq('id', id);
+    if (error) throw error;
+    closeModal(); toast('✅ Actualizado'); renderOrganizaciones(document.getElementById('page-content'));
+  } catch (error) {
+    toast('❌ ' + error.message);
+  }
 }
 
 async function renderEmpleados(pc){
@@ -1280,11 +1444,247 @@ async function renderEmpleados(pc){
     </div>`;
 }
 
-async function renderEventos(pc){ pc.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Sección en desarrollo...</div>'; }
-async function renderPulseras(pc){ pc.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Sección en desarrollo...</div>'; }
-async function renderFichajes(pc){ pc.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Sección en desarrollo...</div>'; }
-async function renderInformes(pc){ pc.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Sección en desarrollo...</div>'; }
-async function renderTransacciones(pc){ pc.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Sección en desarrollo...</div>'; }
+async function renderEventos(pc){
+  await cargarEventos();
+  pc.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div><div style="font-family:Syne;font-size:20px;font-weight:700">${_eventos.length} eventos</div></div>
+      <button class="btn btn-p" onclick="modalNuevoEvento()">+ Nuevo evento</button>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Nombre</th><th>Fecha</th><th>Lugar</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${_eventos.map(e=>`<tr>
+          <td style="font-weight:500">${e.nombre}</td>
+          <td style="font-size:12px;color:var(--muted)">${(e.fecha_inicio||'').slice(0,10)}</td>
+          <td style="font-size:12px;color:var(--muted)">${e.venue_nombre||'—'}${e.venue_ciudad?', '+e.venue_ciudad:''}</td>
+          <td><span class="badge ${e.estado==='publicado'?'b-green':e.estado==='cancelado'?'b-red':'b-gray'}">${e.estado}</span></td>
+          <td><div style="display:flex;gap:6px">
+            <button class="btn btn-g" style="padding:4px 10px;font-size:11px" onclick='modalEditarEvento(${JSON.stringify(e).replace(/'/g, "\\'")}  )'>✏️</button>
+            <button class="btn btn-danger" style="padding:4px 10px;font-size:11px" onclick="confirmarEliminarEvento('${e.id}','${e.nombre.replace(/'/g,"\\'")}')">✕</button>
+          </div></td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+function modalNuevoEvento(){
+  openModal(`
+    <div class="modal-title">+ Nuevo evento</div>
+    <label class="form-lbl">Nombre</label>
+    <input class="form-input" id="ne-nombre" placeholder="Festival, concierto…"/>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-lbl">Fecha inicio</label><input class="form-input" id="ne-fecha" type="date"/></div>
+      <div><label class="form-lbl">Hora inicio</label><input class="form-input" id="ne-hora" type="time" value="22:00"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-lbl">Fecha fin</label><input class="form-input" id="ne-fecha-fin" type="date"/></div>
+      <div><label class="form-lbl">Hora fin</label><input class="form-input" id="ne-hora-fin" type="time" value="06:00"/></div>
+    </div>
+    <label class="form-lbl">Lugar (Sala, Ciudad)</label>
+    <input class="form-input" id="ne-lugar" placeholder="Sala, Barcelona"/>
+    <label class="form-lbl">Estado</label>
+    <select class="form-select" id="ne-estado">
+      <option value="borrador">Borrador</option>
+      <option value="publicado">Publicado</option>
+      <option value="confirmado">Confirmado</option>
+    </select>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p" style="flex:2" onclick="crearEvento()">Crear evento</button>
+    </div>`);
+  setTimeout(()=>document.getElementById('ne-nombre')?.focus(),80);
+}
+
+async function crearEvento(){
+  const nombre=document.getElementById('ne-nombre').value.trim();
+  if(!nombre){toast('⚠️ Nombre obligatorio');return;}
+  const fecha=document.getElementById('ne-fecha').value||new Date().toISOString().slice(0,10);
+  const hora=document.getElementById('ne-hora').value||'22:00';
+  const fechaFin=document.getElementById('ne-fecha-fin').value||fecha;
+  const horaFin=document.getElementById('ne-hora-fin').value||'06:00';
+  const lugar=document.getElementById('ne-lugar').value||'';
+  const parts=lugar.split(',');
+  const slug=nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-')+'-'+Date.now();
+  const{error}=await _sb.from('events').insert({
+    slug,nombre,fecha_inicio:`${fecha}T${hora}:00`,fecha_fin:`${fechaFin}T${horaFin}:00`,
+    venue_nombre:parts[0]?.trim()||'',venue_ciudad:parts[1]?.trim()||'',
+    estado:document.getElementById('ne-estado').value,creado_por:userProfile?.nombre||'superadmin'
+  });
+  if(error){toast('Error: '+error.message);return;}
+  toast(`Evento "${nombre}" creado ✓`);closeModal();await cargarEventos();renderEventos(document.getElementById('page-content'));
+}
+
+function modalEditarEvento(ev){
+  const fi=(ev.fecha_inicio||'').slice(0,10);const hi=(ev.fecha_inicio||'').slice(11,16)||'22:00';
+  const ff=(ev.fecha_fin||'').slice(0,10)||fi;const hf=(ev.fecha_fin||'').slice(11,16)||'06:00';
+  openModal(`
+    <div class="modal-title">✏️ Editar evento</div>
+    <label class="form-lbl">Nombre</label><input class="form-input" id="ee-nombre" value="${ev.nombre}"/>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-lbl">Fecha inicio</label><input class="form-input" id="ee-fecha" type="date" value="${fi}"/></div>
+      <div><label class="form-lbl">Hora inicio</label><input class="form-input" id="ee-hora-inicio" type="time" value="${hi}"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><label class="form-lbl">Fecha fin</label><input class="form-input" id="ee-fecha-fin" type="date" value="${ff}"/></div>
+      <div><label class="form-lbl">Hora fin</label><input class="form-input" id="ee-hora-fin" type="time" value="${hf}"/></div>
+    </div>
+    <label class="form-lbl">Lugar</label><input class="form-input" id="ee-lugar" value="${(ev.venue_nombre||'')+(ev.venue_ciudad?', '+ev.venue_ciudad:'')}"/>
+    <label class="form-lbl">Estado</label>
+    <select class="form-select" id="ee-estado">
+      ${['borrador','publicado','confirmado','produccion','agotado','cancelado','finalizado'].map(s=>`<option value="${s}" ${ev.estado===s?'selected':''}>${s}</option>`).join('')}
+    </select>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-p" style="flex:2" onclick="guardarEvento('${ev.id}')">Guardar</button>
+    </div>`);
+}
+
+async function guardarEvento(id){
+  const lugar=document.getElementById('ee-lugar').value||'';const parts=lugar.split(',');
+  const fecha=document.getElementById('ee-fecha').value;const hi=document.getElementById('ee-hora-inicio').value||'22:00';
+  const ff=document.getElementById('ee-fecha-fin').value||fecha;const hf=document.getElementById('ee-hora-fin').value||'06:00';
+  const{error}=await _sb.from('events').update({
+    nombre:document.getElementById('ee-nombre').value.trim(),
+    fecha_inicio:fecha?`${fecha}T${hi}:00`:undefined,fecha_fin:ff?`${ff}T${hf}:00`:undefined,
+    venue_nombre:parts[0]?.trim()||'',venue_ciudad:parts[1]?.trim()||'',estado:document.getElementById('ee-estado').value
+  }).eq('id',id);
+  if(error){toast('Error: '+error.message);return;}
+  toast('Evento actualizado ✓');closeModal();await cargarEventos();renderEventos(document.getElementById('page-content'));
+}
+
+function confirmarEliminarEvento(id,nombre){
+  openModal(`
+    <div class="modal-title">¿Eliminar evento?</div>
+    <div style="color:var(--muted);font-size:14px;margin-bottom:20px">Vas a eliminar <strong style="color:var(--txt)">${nombre}</strong>. No se puede deshacer.</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g" style="flex:1" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" style="flex:2" onclick="ejecutarEliminarEvento('${id}')">Sí, eliminar</button>
+    </div>`);
+}
+
+async function ejecutarEliminarEvento(id){
+  const{error}=await _sb.from('events').delete().eq('id',id);
+  if(error){toast('Error: '+error.message);return;}
+  toast('Evento eliminado ✓');closeModal();await cargarEventos();renderEventos(document.getElementById('page-content'));
+}
+async function renderPulseras(pc){
+  pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando pulseras…</div>';
+  const{data:wbs}=await _sb.from('rfid_wristbands').select('*').order('created_at',{ascending:false}).limit(100);
+  pc.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-family:Syne;font-size:20px;font-weight:700">${(wbs||[]).length} pulseras</div>
+      <button class="btn btn-g" onclick="renderPulseras(document.getElementById('page-content'))">↺ Refrescar</button>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>UID</th><th>Titular</th><th>Saldo</th><th>Estado</th><th>Último uso</th></tr></thead>
+        <tbody>${(wbs||[]).map(w=>`<tr>
+          <td style="font-family:monospace;font-size:12px;color:var(--a3)">${w.uid}</td>
+          <td style="font-weight:500">${w.holder_name||'Sin nombre'}</td>
+          <td style="color:var(--a1);font-weight:600">${fmt(w.balance)}€</td>
+          <td><span class="badge ${w.status==='active'?'b-green':'b-red'}">${w.status}</span></td>
+          <td style="font-size:12px;color:var(--muted)">${w.last_used_at?new Date(w.last_used_at).toLocaleDateString('es-ES'):'—'}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+async function renderFichajes(pc){
+  pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando fichajes…</div>';
+  const weekStart=new Date(); weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7)); weekStart.setHours(0,0,0,0);
+  let data=[];
+  try{
+    const{data:fichs,error}=await _sb.from('staff_checkins')
+      .select('*, empleados(nombre,departamento)')
+      .gte('entrada_at',weekStart.toISOString())
+      .order('entrada_at',{ascending:false}).limit(200);
+    if(!error) data=fichs||[];
+  }catch(_){}
+  pc.innerHTML=`
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">Fichajes — semana actual</div>
+    ${!data.length?'<div class="card" style="text-align:center;padding:40px;color:var(--muted)">Sin fichajes esta semana.</div>':`
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Empleado</th><th>Dept.</th><th>Entrada</th><th>Salida</th><th>Horas</th><th>Estado</th></tr></thead>
+        <tbody>${data.map(f=>`<tr>
+          <td style="font-weight:500">${f.empleados?.nombre||f.empleado_nombre||'—'}</td>
+          <td style="color:var(--muted)">${f.empleados?.departamento||'—'}</td>
+          <td style="font-size:12px">${new Date(f.entrada_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+          <td style="font-size:12px">${f.salida_at?new Date(f.salida_at).toLocaleString('es-ES',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—'}</td>
+          <td style="color:var(--a1)">${f.minutos?minsToHHMM(f.minutos):'En curso'}</td>
+          <td><span class="badge ${f.salida_at?'b-gray':'b-green'}">${f.salida_at?'Cerrado':'Activo'}</span></td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`}`;
+}
+async function renderInformes(pc){
+  pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando…</div>';
+  const[{data:wbs},{data:txs}]=await Promise.all([
+    _sb.from('rfid_wristbands').select('balance,status'),
+    _sb.from('rfid_transactions').select('type,amount,created_at').order('created_at',{ascending:false}).limit(500),
+  ]);
+  const totalBal=(wbs||[]).reduce((s,w)=>s+parseFloat(w.balance||0),0);
+  const totalTop=(txs||[]).filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const totalPur=(txs||[]).filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
+
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const txHoy=(txs||[]).filter(t=>new Date(t.created_at)>=hoy);
+  const topHoy=txHoy.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const purHoy=txHoy.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
+
+  pc.innerHTML=`
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:16px">Informes</div>
+    <div class="g4 mb16">
+      <div class="stat"><div class="stat-lbl">Saldo en circulación</div><div class="stat-val" style="color:var(--a1);font-size:20px">${fmt(totalBal)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Total recargado</div><div class="stat-val" style="color:var(--success);font-size:20px">${fmt(totalTop)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Total consumido</div><div class="stat-val" style="color:var(--a2);font-size:20px">${fmt(totalPur)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Pulseras activas</div><div class="stat-val" style="color:var(--a3)">${(wbs||[]).filter(w=>w.status==='active').length}</div></div>
+    </div>
+    <div class="g2">
+      <div class="card"><div class="card-title">Hoy</div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span>Recargado</span><strong style="color:var(--success)">${fmt(topHoy)}€</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0"><span>Consumido</span><strong style="color:var(--a2)">${fmt(purHoy)}€</strong></div>
+      </div>
+      <div class="card"><div class="card-title">Balance global</div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span>Recargado</span><strong>${fmt(totalTop)}€</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span>Consumido</span><strong style="color:var(--a2)">-${fmt(totalPur)}€</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0"><span style="font-weight:600">Saldo retenido</span><strong style="color:var(--a1)">${fmt(totalTop-totalPur)}€</strong></div>
+      </div>
+    </div>`;
+}
+async function renderTransacciones(pc){
+  pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando…</div>';
+  const{data:txs}=await _sb.from('rfid_transactions')
+    .select('*, rfid_wristbands(holder_name,uid)')
+    .order('created_at',{ascending:false}).limit(150);
+  const datos=txs||[];
+  const totalTop=datos.filter(t=>t.type==='topup').reduce((s,t)=>s+parseFloat(t.amount||0),0);
+  const totalPur=datos.filter(t=>t.type==='purchase').reduce((s,t)=>s+Math.abs(parseFloat(t.amount||0)),0);
+  pc.innerHTML=`
+    <div style="font-family:Syne;font-size:20px;font-weight:700;margin-bottom:14px">Últimas ${datos.length} transacciones</div>
+    <div class="g2 mb16">
+      <div class="stat"><div class="stat-lbl">Total recargado</div><div class="stat-val" style="color:var(--success);font-size:20px">${fmt(totalTop)}€</div></div>
+      <div class="stat"><div class="stat-lbl">Total consumido</div><div class="stat-val" style="color:var(--a2);font-size:20px">${fmt(totalPur)}€</div></div>
+    </div>
+    <div class="card">
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Pulsera</th><th>Tipo</th><th>Concepto</th><th>Importe</th><th>Saldo post</th><th>Operador</th></tr></thead>
+        <tbody>${datos.map(t=>`<tr>
+          <td style="font-size:12px;color:var(--muted);white-space:nowrap">${fmtDate(t.created_at)}</td>
+          <td style="font-size:12px">${t.rfid_wristbands?.holder_name||t.rfid_wristbands?.uid||'—'}</td>
+          <td><span class="badge ${t.type==='topup'?'b-green':'b-red'}">${t.type}</span></td>
+          <td style="font-size:12px">${t.description||'—'}</td>
+          <td style="font-weight:600;color:${t.amount>=0?'var(--success)':'var(--danger)'}">${t.amount>=0?'+':''}${fmt(t.amount)}€</td>
+          <td style="font-size:12px;color:var(--muted)">${fmt(t.balance_after)}€</td>
+          <td style="font-size:12px;color:var(--muted)">${t.operator||'—'}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+}
 
 function openModal(html){
   document.getElementById('modal-box').innerHTML=html;
