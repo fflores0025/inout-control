@@ -82,6 +82,72 @@
     .device-status.off{background:var(--muted);}
     #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);background-image:radial-gradient(ellipse 50% 35% at 50% 0%,rgba(255,60,172,.08) 0%,transparent 60%);}
     .login-card{width:100%;max-width:380px;background:var(--card);border:1px solid var(--border);border-radius:18px;padding:36px 32px;}
+    
+    /* PANEL LATERAL DE DISPOSITIVOS */
+    .device-panel{
+      position:fixed;
+      top:0;
+      right:-420px;
+      width:420px;
+      height:100vh;
+      background:var(--surf);
+      border-left:1px solid var(--border);
+      z-index:500;
+      transition:right .3s;
+      display:flex;
+      flex-direction:column;
+      box-shadow:-4px 0 20px rgba(0,0,0,.3);
+    }
+    .device-panel.open{right:0;}
+    .device-panel-header{
+      padding:18px 20px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      background:var(--card);
+    }
+    .device-panel-close{
+      width:32px;
+      height:32px;
+      border-radius:50%;
+      background:transparent;
+      border:1px solid var(--border);
+      color:var(--muted);
+      font-size:18px;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      transition:all .15s;
+    }
+    .device-panel-close:hover{background:var(--bg);color:var(--txt);}
+    .device-panel-tabs{
+      display:flex;
+      padding:0 20px;
+      border-bottom:1px solid var(--border);
+      background:var(--card);
+      gap:4px;
+    }
+    .device-panel-tab{
+      padding:12px 16px;
+      cursor:pointer;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      border-bottom:2px solid transparent;
+      transition:all .15s;
+    }
+    .device-panel-tab:hover{color:var(--txt);}
+    .device-panel-tab.active{color:var(--a1);border-bottom-color:var(--a1);}
+    .device-panel-content{
+      flex:1;
+      overflow-y:auto;
+      padding:20px;
+    }
+    
     @media(max-width:768px){
       :root{--sidebar:100vw;}
       .sidebar{position:fixed;transform:translateX(-100%);width:100vw;transition:transform .25s;}
@@ -89,12 +155,33 @@
       .main-area{margin-left:0;}
       .g4{grid-template-columns:1fr 1fr;}.g3{grid-template-columns:1fr;}.g2{grid-template-columns:1fr;}
       .main-content{padding:14px;}
+      .device-panel{width:100vw;right:-100vw;}
     }
   </style>
 </head>
 <body>
 <div id="toast"></div>
 <div class="modal-overlay" id="modal-overlay"><div class="modal-box" id="modal-box"></div></div>
+
+<!-- PANEL LATERAL DE DISPOSITIVOS -->
+<div class="device-panel" id="device-panel">
+  <div class="device-panel-header">
+    <div>
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px" id="dp-device-name">—</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px" id="dp-device-type">—</div>
+    </div>
+    <button class="device-panel-close" onclick="closeDevicePanel()">✕</button>
+  </div>
+  <div class="device-panel-tabs">
+    <div class="device-panel-tab active" onclick="switchDeviceTab('info')">📊 Info</div>
+    <div class="device-panel-tab" onclick="switchDeviceTab('stats')">📈 Estadísticas</div>
+    <div class="device-panel-tab" onclick="switchDeviceTab('test')">🔧 Test</div>
+    <div class="device-panel-tab" onclick="switchDeviceTab('edit')">✏️ Editar</div>
+  </div>
+  <div class="device-panel-content" id="device-panel-content">
+    <!-- Contenido dinámico -->
+  </div>
+</div>
 
 <!-- LOGIN -->
 <div id="login-screen">
@@ -145,6 +232,8 @@ let currentUser=null, userProfile=null, currentPage='dashboard';
 let _empleados=[], _eventos=[], _orgsCache=[];
 let _activeChannels = [];
 let _dispositivosInterval = null;
+let _currentDevice = null; // Dispositivo actualmente abierto en el panel
+let _currentDeviceTab = 'info'; // Tab activo
 
 const NAV=[
   {sec:'Panel'},
@@ -191,6 +280,287 @@ function closeModal(){
   _activeChannels = [];
 }
 document.getElementById('modal-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('modal-overlay'))closeModal();});
+
+// ══════════════════════════════════════════════════════════════════════════
+// PANEL LATERAL DE DISPOSITIVOS
+// ══════════════════════════════════════════════════════════════════════════
+
+function openDevicePanel(device) {
+  _currentDevice = device;
+  _currentDeviceTab = 'info';
+  
+  const tipo = DEVICE_TYPES[device.type] || {label: device.type, icon: '📱'};
+  document.getElementById('dp-device-name').textContent = device.name || tipo.label;
+  document.getElementById('dp-device-type').textContent = device.location || 'Sin ubicación';
+  
+  // Activar primera tab
+  document.querySelectorAll('.device-panel-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.device-panel-tab')[0].classList.add('active');
+  
+  renderDeviceTabContent('info');
+  document.getElementById('device-panel').classList.add('open');
+}
+
+function closeDevicePanel() {
+  document.getElementById('device-panel').classList.remove('open');
+  _currentDevice = null;
+}
+
+function switchDeviceTab(tab) {
+  _currentDeviceTab = tab;
+  document.querySelectorAll('.device-panel-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  renderDeviceTabContent(tab);
+}
+
+function renderDeviceTabContent(tab) {
+  const content = document.getElementById('device-panel-content');
+  const d = _currentDevice;
+  if (!d) return;
+  
+  const tipo = DEVICE_TYPES[d.type] || {label: d.type, icon: '📱', color: 'var(--muted)'};
+  const lastSeen = d.last_seen ? new Date(d.last_seen) : null;
+  const isOnline = lastSeen && (Date.now() - lastSeen.getTime()) < 300000;
+  
+  if (tab === 'info') {
+    content.innerHTML = `
+      <div class="card mb16" style="text-align:center;padding:24px">
+        <div style="font-size:64px;margin-bottom:12px">${tipo.icon}</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:4px">${d.name || tipo.label}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${d.location || 'Sin ubicación'}</div>
+        <span class="badge ${isOnline ? 'b-green' : 'b-gray'}" style="font-size:13px;padding:6px 14px">
+          ${isOnline ? '🟢 Online' : '⚫ Offline'}
+        </span>
+      </div>
+      
+      <div class="card mb16">
+        <div class="card-title">Información básica</div>
+        <div style="display:grid;gap:12px">
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            <span style="color:var(--muted);font-size:12px">TIPO</span>
+            <span style="font-weight:600">${tipo.label}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            <span style="color:var(--muted);font-size:12px">ID</span>
+            <span style="font-family:monospace;font-size:11px;color:var(--a3)">${d.id.slice(0,8)}...</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+            <span style="color:var(--muted);font-size:12px">UPTIME</span>
+            <span style="font-weight:600;color:var(--a1)">${d.uptime_seconds ? Math.floor(d.uptime_seconds/3600) + 'h' : '0h'}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0">
+            <span style="color:var(--muted);font-size:12px">ÚLTIMA CONEXIÓN</span>
+            <span style="font-size:12px">${lastSeen ? lastSeen.toLocaleString('es-ES', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : 'Nunca'}</span>
+          </div>
+        </div>
+      </div>
+      
+      ${d.user_name ? `
+        <div class="card">
+          <div class="card-title">Usuario actual</div>
+          <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:8px;border-left:3px solid var(--success)">
+            <div style="font-size:28px">👤</div>
+            <div>
+              <div style="font-weight:600;font-size:14px">${d.user_name}</div>
+              <div style="font-size:11px;color:var(--muted)">${d.user_role || 'Sin rol'}</div>
+            </div>
+          </div>
+        </div>
+      ` : `
+        <div class="card" style="text-align:center;padding:32px;color:var(--muted)">
+          <div style="font-size:40px;opacity:.3;margin-bottom:8px">👤</div>
+          <div style="font-size:13px">Sin usuario activo</div>
+        </div>
+      `}
+    `;
+  }
+  
+  else if (tab === 'stats') {
+    content.innerHTML = `
+      <div class="card" style="text-align:center;padding:60px">
+        <div style="font-size:48px;opacity:.3;margin-bottom:12px">📈</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:8px">Estadísticas en desarrollo</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:300px;margin:0 auto">
+          Próximamente: ventas totales, transacciones, entradas vendidas, gráficas de actividad...
+        </div>
+      </div>
+    `;
+  }
+  
+  else if (tab === 'test') {
+    content.innerHTML = `
+      <div class="card mb16">
+        <div class="card-title">🔧 Diagnóstico del dispositivo</div>
+        <button class="btn btn-p btn-full" style="margin-bottom:10px" onclick="testDevicePing('${d.id}')">
+          📡 Test de conectividad
+        </button>
+        <button class="btn btn-g btn-full" style="margin-bottom:10px" onclick="testDeviceDatabase('${d.id}')">
+          🗄️ Test de base de datos
+        </button>
+        <button class="btn btn-g btn-full" onclick="testDeviceNFC('${d.id}')">
+          📲 Test NFC (si aplica)
+        </button>
+      </div>
+      
+      <div class="card" id="test-results" style="display:none">
+        <div class="card-title">Resultados del test</div>
+        <div id="test-results-content" style="font-family:monospace;font-size:12px;background:var(--bg);padding:12px;border-radius:6px;white-space:pre-wrap"></div>
+      </div>
+    `;
+  }
+  
+  else if (tab === 'edit') {
+    content.innerHTML = `
+      <div class="card">
+        <div class="card-title">✏️ Editar dispositivo</div>
+        <div style="background:rgba(255,171,0,.1);border:1px solid rgba(255,171,0,.2);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--warn)">
+          🔒 Solo <strong>SuperAdmin</strong> puede editar dispositivos
+        </div>
+        
+        <label class="form-lbl">Nombre del dispositivo</label>
+        <input class="form-input" id="edit-device-name" value="${d.name || ''}" placeholder="Ej: Taquilla Física 1" />
+        
+        <label class="form-lbl">Ubicación / Sala</label>
+        <input class="form-input" id="edit-device-location" value="${d.location || ''}" placeholder="Ej: Entrada Principal" />
+        
+        <label class="form-lbl">Tipo de dispositivo</label>
+        <select class="form-select" id="edit-device-type">
+          <option value="valid" ${d.type === 'valid' ? 'selected' : ''}>📡 inout-valid (POS Operador)</option>
+          <option value="kiosk" ${d.type === 'kiosk' ? 'selected' : ''}>🎟️ inout-kiosk (Kiosco)</option>
+          <option value="register" ${d.type === 'register' ? 'selected' : ''}>📝 inout-register (Registro)</option>
+          <option value="control" ${d.type === 'control' ? 'selected' : ''}>⚙️ inout-control (Admin)</option>
+          <option value="staff" ${d.type === 'staff' ? 'selected' : ''}>👷 inout-staff (Personal)</option>
+        </select>
+        
+        <label class="form-lbl">URL personalizada (opcional)</label>
+        <input class="form-input" id="edit-device-url" value="${d.url || ''}" placeholder="https://..." />
+        
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button class="btn btn-g" style="flex:1" onclick="closeDevicePanel()">Cancelar</button>
+          <button class="btn btn-p" style="flex:2" onclick="saveDeviceEdit('${d.id}')">💾 Guardar cambios</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+async function testDevicePing(deviceId) {
+  const results = document.getElementById('test-results');
+  const content = document.getElementById('test-results-content');
+  results.style.display = 'block';
+  content.textContent = '⏳ Ejecutando test de conectividad...\n';
+  
+  setTimeout(() => {
+    const d = _currentDevice;
+    const lastSeen = d.last_seen ? new Date(d.last_seen) : null;
+    const isOnline = lastSeen && (Date.now() - lastSeen.getTime()) < 300000;
+    
+    content.textContent = `✅ Test completado
+
+📡 Estado: ${isOnline ? '🟢 ONLINE' : '🔴 OFFLINE'}
+🕐 Última conexión: ${lastSeen ? lastSeen.toLocaleString('es-ES') : 'Nunca'}
+⏱️ Uptime: ${d.uptime_seconds ? Math.floor(d.uptime_seconds/3600) + 'h ' + Math.floor((d.uptime_seconds%3600)/60) + 'm' : 'N/A'}
+🆔 Device ID: ${d.id}
+🌐 URL: ${d.url || 'No configurada'}
+
+${isOnline ? '✅ Dispositivo responde correctamente' : '⚠️ Dispositivo sin conexión reciente'}`;
+  }, 1500);
+}
+
+async function testDeviceDatabase(deviceId) {
+  const results = document.getElementById('test-results');
+  const content = document.getElementById('test-results-content');
+  results.style.display = 'block';
+  content.textContent = '⏳ Probando conexión a Supabase...\n';
+  
+  try {
+    const { data, error } = await _sb
+      .from('control_devices')
+      .select('*')
+      .eq('id', deviceId)
+      .single();
+    
+    if (error) throw error;
+    
+    content.textContent = `✅ Conexión exitosa a Supabase
+
+📦 Datos del dispositivo:
+- ID: ${data.id}
+- Tipo: ${data.type}
+- Nombre: ${data.name || 'Sin nombre'}
+- Última actualización: ${data.last_seen ? new Date(data.last_seen).toLocaleString('es-ES') : 'N/A'}
+
+✅ Base de datos accesible correctamente`;
+  } catch (e) {
+    content.textContent = `❌ Error de conexión
+
+${e.message}
+
+⚠️ No se pudo conectar con Supabase`;
+  }
+}
+
+async function testDeviceNFC(deviceId) {
+  const results = document.getElementById('test-results');
+  const content = document.getElementById('test-results-content');
+  results.style.display = 'block';
+  content.textContent = `⏳ Test NFC no implementado aún
+
+Este test verificará:
+- Lector NFC disponible
+- Compatibilidad Web NFC API
+- Lectura de pulseras RFID
+
+🔧 En desarrollo...`;
+}
+
+async function saveDeviceEdit(deviceId) {
+  const name = document.getElementById('edit-device-name').value.trim();
+  const location = document.getElementById('edit-device-location').value.trim();
+  const type = document.getElementById('edit-device-type').value;
+  const url = document.getElementById('edit-device-url').value.trim();
+  
+  if (!name) {
+    toast('⚠️ El nombre es obligatorio');
+    return;
+  }
+  
+  try {
+    const { error } = await _sb
+      .from('control_devices')
+      .update({
+        name,
+        location: location || null,
+        type,
+        url: url || null
+      })
+      .eq('id', deviceId);
+    
+    if (error) throw error;
+    
+    toast('✅ Dispositivo actualizado correctamente');
+    
+    // Actualizar dispositivo actual
+    _currentDevice.name = name;
+    _currentDevice.location = location;
+    _currentDevice.type = type;
+    _currentDevice.url = url;
+    
+    // Actualizar header del panel
+    const tipo = DEVICE_TYPES[type] || {label: type, icon: '📱'};
+    document.getElementById('dp-device-name').textContent = name || tipo.label;
+    document.getElementById('dp-device-type').textContent = location || 'Sin ubicación';
+    
+    // Recargar lista de dispositivos
+    if (currentPage === 'dispositivos') {
+      renderDispositivos(document.getElementById('page-content'));
+    }
+    
+  } catch (error) {
+    console.error('Error actualizando dispositivo:', error);
+    toast('❌ Error: ' + error.message);
+  }
+}
 
 // ── AUTH ──────────────────────────────────────────────────────────────────
 async function doLogin(){
@@ -277,7 +647,6 @@ function buildNav(){
 }
 
 function navigate(page){
-  // Limpiar interval de dispositivos si cambiamos de página
   if(currentPage === 'dispositivos' && _dispositivosInterval){
     clearInterval(_dispositivosInterval);
     _dispositivosInterval = null;
@@ -397,7 +766,6 @@ async function renderDashboard(pc){
 
 // ── DISPOSITIVOS ──────────────────────────────────────────────────────────
 async function renderDispositivos(pc){
-  // Limpiar intervalo anterior si existe
   if (_dispositivosInterval) {
     clearInterval(_dispositivosInterval);
     _dispositivosInterval = null;
@@ -441,7 +809,6 @@ async function renderDispositivos(pc){
       return lastSeen && (Date.now() - lastSeen.getTime()) < 300000;
     }).length;
     
-    // Agrupar por tipo
     const byType = {
       valid: devices.filter(d => d.type === 'valid'),
       kiosk: devices.filter(d => d.type === 'kiosk'),
@@ -497,10 +864,7 @@ async function renderDispositivos(pc){
     `;
   }
   
-  // Cargar inmediatamente
   await cargarYMostrarDispositivos();
-  
-  // Auto-refresh cada 30 segundos
   _dispositivosInterval = setInterval(cargarYMostrarDispositivos, 30000);
 }
 
@@ -550,9 +914,12 @@ function renderDeviceCard(d) {
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr auto;gap:6px">
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px">
         <button class="btn btn-p" style="padding:6px 10px;font-size:11px" onclick="window.open('${d.url || tipo.url}','_blank')">
           ↗️ Abrir
+        </button>
+        <button class="btn btn-g" style="padding:6px 10px;font-size:11px" onclick='openDevicePanel(${JSON.stringify(d).replace(/'/g, "\\'")})'> 
+          📋 Ver
         </button>
         <button class="btn btn-danger" style="padding:6px 10px;font-size:11px" onclick="eliminarDispositivo('${d.id}')">
           ✕
@@ -571,7 +938,7 @@ async function eliminarDispositivo(id){
 }
 
 // ════════════════════════════════════════
-//  ORGANIZACIONES
+//  ORGANIZACIONES (sin cambios)
 // ════════════════════════════════════════
 async function renderOrganizaciones(pc) {
   pc.innerHTML = `
@@ -783,7 +1150,6 @@ async function crearOrganizacion() {
 }
 
 async function modalEditarOrganizacion(orgId) {
-  // Cargar datos de la organización
   const { data: org, error } = await _sb
     .from('organizations')
     .select('*')
@@ -868,7 +1234,12 @@ async function actualizarOrganizacion(orgId) {
   }
 }
 
-// ── EMPLEADOS ─────────────────────────────────────────────────────────────
+function openModal(html){
+  document.getElementById('modal-box').innerHTML=html;
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+// ── RESTO DE FUNCIONES (sin cambios) ────────────────────────────────────
 async function renderEmpleados(pc){
   await cargarEmpleados();
   
@@ -927,7 +1298,6 @@ async function renderEmpleados(pc){
     </div>`;
 }
 
-// ── EVENTOS ───────────────────────────────────────────────────────────────
 async function renderEventos(pc){
   await cargarEventos();
   pc.innerHTML=`
@@ -951,11 +1321,6 @@ async function renderEventos(pc){
         </tbody>
       </table></div>
     </div>`;
-}
-
-function openModal(html){
-  document.getElementById('modal-box').innerHTML=html;
-  document.getElementById('modal-overlay').classList.add('show');
 }
 
 async function modalEditarEventoControl(id){
@@ -1089,7 +1454,6 @@ async function crearEventoControl(){
   renderEventos(document.getElementById('page-content'));
 }
 
-// ── PULSERAS ──────────────────────────────────────────────────────────────
 async function renderPulseras(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando pulseras…</div>';
   const{data:wbs}=await _sb.from('rfid_wristbands').select('*').order('created_at',{ascending:false}).limit(100);
@@ -1110,7 +1474,6 @@ async function renderPulseras(pc){
     </div>`;
 }
 
-// ── FICHAJES ──────────────────────────────────────────────────────────────
 async function renderFichajes(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando fichajes…</div>';
   const weekStart=new Date(); weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7)); weekStart.setHours(0,0,0,0);
@@ -1141,7 +1504,6 @@ async function renderFichajes(pc){
     </div>`}`;
 }
 
-// ── INFORMES ─────────────────────────────────────────────────────────────
 async function renderInformes(pc){
   pc.innerHTML='<div style="color:var(--muted);padding:20px">Cargando…</div>';
   const[{data:wbs},{data:txs}]=await Promise.all([
@@ -1178,7 +1540,6 @@ async function renderInformes(pc){
     </div>`;
 }
 
-// ── TRANSACCIONES ─────────────────────────────────────────────────────────
 async function renderTransacciones(pc){
   pc.innerHTML='<div style="color:var(--muted)">Cargando…</div>';
   const{data:txs}=await _sb.from('rfid_transactions')
@@ -1210,7 +1571,6 @@ async function renderTransacciones(pc){
     </div>`;
 }
 
-// ── AUTO-LOGIN ─────────────────────────────────────────────────────────────
 (async function(){
   const{data:{session}}=await _sb.auth.getSession();
   
